@@ -1,18 +1,13 @@
 """
 system_builder.py
-============================================================
-SINGLE SOURCE OF TRUTH for the HTC-AD system model.
+=================
+HTC-AD system model of HADES: mass balances, ADM1 coupling, heat
+integration and Brightway foreground inventory. The case study notebook and
+the Streamlit app both call build_system() and spinup_ss_state() from this
+module.
 
-Both the notebook and the Streamlit app import THIS file and call
-build_system() / spinup_ss_state() from here. Nothing about the
-process logic should ever be duplicated elsewhere again — if you
-need to change mass balances, exchange wiring, or ADM1 coupling,
-change it here and both callers pick it up automatically.
-
-Place this file inside the "ADM1" folder, next to ADM1.py and
-plot_adm1_batch.py. It loads both of those by explicit file path
-(not by `import ADM1`), so it is immune to the folder/module name
-collision that happens when a folder and a .py file share a name.
+ADM1.py and plot_adm1_batch.py are loaded by file path (not `import ADM1`),
+because the folder and the module share the name ADM1.
 
 USAGE
 -----
@@ -35,6 +30,7 @@ USAGE
 import os
 import sys
 import inspect
+import re as _re
 import importlib
 import importlib.util
 from dataclasses import dataclass, field
@@ -45,14 +41,14 @@ import bw2data as bd
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LOAD ADM1.py AND plot_adm1_batch.py BY EXPLICIT PATH (no `import ADM1`)
-# This is the fix for the ADM1-folder-vs-ADM1.py collision.
+# LOAD ADM1.py AND plot_adm1_batch.py BY FILE PATH
 # ─────────────────────────────────────────────────────────────────────────────
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _load_by_path(name, relpath):
+    """Load a module from a path relative to this folder."""
     path = os.path.join(_HERE, relpath)
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
@@ -67,16 +63,25 @@ _plot_mod = _load_by_path("plot_adm1_batch_core", "plot_adm1_batch.py")
 run_adm1 = _adm1_core.run_adm1
 translate_pw_to_adm1 = _adm1_core.translate_pw_to_adm1
 translate_feedstock_to_adm1 = _adm1_core.translate_feedstock_to_adm1
-extract_digestate_composition = _adm1_core.extract_digestate_composition
 plot_adm1_results = _plot_mod.plot_adm1_results
+
+# Companion modules, loaded by path under p1_* names to avoid name clashes in
+# the same Python session.
+hi = _load_by_path("p1_heat_integration", "heat_integration.py")
+hce = _load_by_path("p1_hydrochar_enduse", "hydrochar_enduse.py")
+ac = _load_by_path("p1_ad_characterization", "ad_characterization.py")
+bwl = _load_by_path("p1_bw_lookup", "bw_lookup.py")
+get_flow = bwl.get_flow
+relocate_flow = bwl.relocate_flow
+_template_cats = bwl._template_cats
+CORE_FLOW_LOCATIONS = bwl.CORE_FLOW_LOCATIONS
 
 
 def _load_by_exact_path(name, filepath):
     """
-    Like _load_by_path, but does NOT join with the ADM1 folder's own
-    location — filepath is used exactly as given (absolute, or relative
-    to the current working directory / notebook). Used for the ML module,
-    which typically lives in a sibling folder, not inside ADM1/.
+    Like _load_by_path, but filepath is used as given (absolute, or relative
+    to the current working directory). Used for the ML module, which lives in
+    a sibling folder.
     """
     spec = importlib.util.spec_from_file_location(name, filepath)
     if spec is None or spec.loader is None:
@@ -93,9 +98,9 @@ def _load_by_exact_path(name, filepath):
 def _load_ml_module(ml_module):
     """
     Accepts either:
-      - a plain module name already on sys.path, e.g. "ML2_model"
+      - a plain module name already on sys.path, e.g. "htc_surrogate"
       - a filesystem path ending in .py, e.g. "ML training scripts and
-        models/ML2 model.py" (spaces are fine — loaded by path, not by
+        models/htc_surrogate.py" (spaces are fine — loaded by path, not by
         name). The path is resolved relative to the current working
         directory / notebook, NOT relative to the ADM1 folder.
     """
@@ -115,25 +120,21 @@ def _load_ml_module(ml_module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHYSICAL / ENGINEERING CONSTANTS  (formerly notebook Cell 3)
+# PHYSICAL CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-T_0 = 25
-cp_water = 4.18
-eta_heater = 0.9
-latent_heat_evap = 2260 / 3600
-
-MW_C = 12
-MW_H = 1
-MW_O = 16
-MW_N = 14
-MW_S = 32
-MW_CO2 = 44
-MW_CO = 28
+MW_C = 12.011     # standard atomic weights (IUPAC), g/mol
+MW_H = 1.008
+MW_O = 15.999
+MW_N = 14.007
+MW_S = 32.06
+MW_CO2 = MW_C + 2 * MW_O
+MW_CO = MW_C + MW_O
 
 CH4_density = 0.716
 CO2_density = 1.977
 
+# BSM2 steady-state initial condition (Rosen and Jeppsson, 2006)
 BSM2_INIT = {
     "S_su": 0.012394, "S_aa": 0.0055432, "S_fa": 0.10741,
     "S_va": 0.012333, "S_bu": 0.014003, "S_pro": 0.017584,
@@ -153,8 +154,8 @@ BSM2_INIT = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SYSTEM CONTEXT — replaces every "global X" in the old notebook/app code.
-# Build one of these once (per pathway/location), pass it to build_system().
+# SYSTEM CONTEXT: all inputs of build_system(), built once per pathway and
+# location.
 # ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -205,10 +206,21 @@ class SystemContext:
     COD_conc_target: float = 10.0
     ISR_batch: float = 2.0
 
-    # Optional metadata (used by Streamlit export / diagrams)
+    # optional metadata (Streamlit export)
     location_country: str = ""
     location_province: str = ""
     location_code: str = ""
+    # dataset location priority for background inputs, e.g. ["CA-QC", "CA", "RoW", "GLO"]
+    # (None: location_code, then CA, RoW, GLO)
+    location_priority: Optional[list] = None
+
+    # digestate characterization, heat integration and hydrochar end use
+    feedstock_name: str = "food_waste"   # ad_characterization key (Pathway B digestate)
+    eps_HR: Optional[float] = None       # HTC feed preheat effectiveness (None -> hi.EPS_HR_CENTRAL)
+    nox_conv: float = 0.10               # fuel N -> NOx, hydrochar boiler (hce.NOX_CONV_CENTRAL)
+    qc_heat_mix: Any = None              # foreground activity: Quebec industrial combustion heat mix
+    heat_mix_components_qc: Any = None   # bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, ...)
+    ash_disposal: Any = None             # ash treatment of the boiler ash (None -> omitted, printed)
 
 
 def get_or_create(db, code, name, unit, location="CA-QC", type_="process"):
@@ -233,31 +245,54 @@ def get_or_create(db, code, name, unit, location="CA-QC", type_="process"):
 
 
 def run_ml_model(HTC_parametric_ML, params=None):
+    """Call the HTC surrogate with the parameters it accepts.
+
+    Also computes the carbon recovery in the hydrochar,
+    Y_char x C_char / C_feed (C_recovery_raw). Char yield and char C come
+    from separate models, so a value above 1 would break the carbon balance;
+    it is flagged by the QA checks. Returns (dataframe or None, inventory dict).
+    """
     p = params if params is not None else {}
     valid_args = inspect.signature(HTC_parametric_ML).parameters.keys()
     usable_args = {k: v for k, v in p.items() if k in valid_args}
     result = HTC_parametric_ML(**usable_args)
-    return result if isinstance(result, tuple) and len(result) == 2 else (None, result)
+    df, inv = result if isinstance(result, tuple) and len(result) == 2 else (None, result)
+    try:
+        inv["C_recovery_raw"] = (inv["Y_char (%)"] / 100.0) * inv["C_char (%)"] / p["C_feed"]
+    except (KeyError, TypeError, ZeroDivisionError):
+        pass
+    return df, inv
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MASS BALANCE FUNCTIONS  (formerly notebook Cell 7)
+# HTC MASS BALANCE
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_htc_mass_balance(m_feed_eff, WC_feed, Y_char_pct, T_HTC,
-                              MC_char, target_MC_char_dry):
-    dry_fraction = 1 - WC_feed
-    Y_char_dry = Y_char_pct / 100
+                             MC_char, target_MC_char_dry, eps_HR=None,
+                             T_feed_C=None):
+    # T_feed_C: temperature of the HTC feed entering the preheater (None:
+    # heat_integration.T_AMB_C, raw feedstock in Pathway A; Pathway B passes
+    # the temperature of the wet solids leaving the digestate centrifuge).
+    # MC_char: moisture of the hydrochar cake leaving the filter press.
+    MC_char = hi.effective_MC_char(MC_char)
+    dry_fraction = 1.0 - WC_feed
+    Y_char_dry = Y_char_pct / 100.0
 
+    # HTC gas: predominantly CO2 (Berge et al., 2011); 95/5 CO2/CO molar
+    # split assumed.
     CO2_frac_mol = 0.95
     CO_frac_mol = 0.05
 
     dry_mass_in = m_feed_eff * dry_fraction
     water_mass_in = m_feed_eff * WC_feed
 
+    # 1. Solid hydrochar produced (dry mass)
     HC_dry_mass = dry_mass_in * Y_char_dry
-    HC_water_retained = min(HC_dry_mass * (MC_char / (1 - MC_char)),
-                             water_mass_in * 0.90)
+
+    # 2. Water retained in the wet cake (limited by the water available)
+    HC_water_retained = min(HC_dry_mass * (MC_char / (1.0 - MC_char)),
+                            water_mass_in * 0.90)
     HC_wet_yield = HC_dry_mass + HC_water_retained
 
     print(f"\n[MB diagnostic]")
@@ -271,25 +306,46 @@ def compute_htc_mass_balance(m_feed_eff, WC_feed, Y_char_pct, T_HTC,
     print(f"  HC_water_retained = {HC_water_retained:.2f} kg")
     print(f"  HC_wet_yield      = {HC_wet_yield:.2f} kg")
 
-    Gas_yield_dry = max(0.0, 0.121 * T_HTC - 18.34) / 100
+    # 3. Gas formation and process water (PW) yield
+    Gas_yield_dry = max(0.0, 0.121 * T_HTC - 18.34) / 100.0
     Gas_yield_total = m_feed_eff * dry_fraction * Gas_yield_dry
-    CO2_yield = Gas_yield_total * (CO2_frac_mol * MW_CO2) / (CO2_frac_mol * MW_CO2 + CO_frac_mol * MW_CO)
-    CO_yield = Gas_yield_total * (CO_frac_mol * MW_CO) / (CO2_frac_mol * MW_CO2 + CO_frac_mol * MW_CO)
+    gas_denom = CO2_frac_mol * MW_CO2 + CO_frac_mol * MW_CO
+    CO2_yield = Gas_yield_total * (CO2_frac_mol * MW_CO2) / gas_denom
+    CO_yield = Gas_yield_total * (CO_frac_mol * MW_CO) / gas_denom
     PW_yield = m_feed_eff - (HC_wet_yield + CO2_yield + CO_yield)
 
-    HC_dry_yield = HC_wet_yield * (1 - MC_char) / (1 - target_MC_char_dry)
-    wastewater_m3 = (HC_wet_yield - HC_dry_yield) / 1000
-    elec_kWh = (HC_wet_yield - HC_dry_yield) * latent_heat_evap
-    elec_MJ = elec_kWh * 3.6
+    # 4. Dried product at the target moisture (dry char mass conserved)
+    HC_dry_yield = HC_dry_mass / (1.0 - target_MC_char_dry)
 
-    Q_heat_kWh = (m_feed_eff * cp_water * (T_HTC - T_0)) / 3600 / eta_heater
+    # 5-6. HTC heating with feed preheat, then dryer heat and electricity
+    #      (heat_integration.py).
+    water_evaporated_kg = HC_wet_yield - HC_dry_yield
+    heat_htc = hi.htc_duty(m_slurry_kg=m_feed_eff, m_dry_kg=dry_mass_in,
+                           T_HTC_C=T_HTC, eps_HR=eps_HR,
+                           T_amb_C=T_feed_C)
+    heat_dry = hi.dryer_duty(water_evaporated_kg, m_prod_kg=m_feed_eff,
+                             T_prod1_C=heat_htc["T_prod1_C"],
+                             m_dry_char_kg=HC_dry_mass)
+    Q_heat_kWh = heat_htc["Q_HTC_util_kWh"]
+    elec_MJ = heat_dry["Q_dry_util_MJ"]       # dryer heat supplied by the utility (MJ)
+    elec_kWh = elec_MJ / 3.6
+    dryer_fan_kWh = heat_dry["E_dry_elec_kWh"]   # dryer fans + filter press
+    wastewater_m3 = heat_dry["condensate_m3"]
+    # product cooler E2: product cooled to T_SEP_C before the letdown and the
+    # filter press; the use of this heat is decided in build_system
+    heat_E2 = hi.product_cooler_duty(m_feed_eff, heat_dry["T_prod2_C"])
 
     return dict(
         HC_dry_mass=HC_dry_mass, HC_wet_yield=HC_wet_yield, HC_dry_yield=HC_dry_yield,
         Gas_yield_total=Gas_yield_total, CO2_yield=CO2_yield, CO_yield=CO_yield,
         PW_yield=PW_yield, wastewater_m3=wastewater_m3,
         Q_heat_kWh=Q_heat_kWh, elec_MJ=elec_MJ, elec_kWh=elec_kWh,
-        Y_gas_drybasis=Gas_yield_total / dry_mass_in * 100,
+        Y_gas_drybasis=Gas_yield_total / dry_mass_in * 100.0,
+        dryer_fan_kWh=dryer_fan_kWh, water_evaporated_kg=water_evaporated_kg,
+        T_prod1_C=heat_htc["T_prod1_C"], T_prod2_C=heat_dry["T_prod2_C"],
+        heat_htc=heat_htc, heat_dry=heat_dry,
+        heat_E2=heat_E2, T_SEP_C=heat_E2["T_SEP_C"],
+        MC_char_used=MC_char,
     )
 
 
@@ -304,7 +360,7 @@ def print_mass_balance_diagnostic(m_feed_eff, mb, WC_feed):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ADM1 RUNNER  (formerly notebook Cell 8)
+# ADM1 RUNNER
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _blank_inputs(pw_inputs):
@@ -408,10 +464,7 @@ def run_adm1_and_correct(pw_inputs, adm1_mode, adm1_q_ad, adm1_HRT_days,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BRIGHTWAY EXCHANGE BUILDERS  (formerly notebook Cell 9)
-# Fixed: build_ad_exchanges and build_drying_exchanges now take
-# ad_elec / ad_heat / drying_heat explicitly instead of relying on
-# notebook globals (that was a latent bug in the old code).
+# BRIGHTWAY EXCHANGE BUILDERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_htc_reactor_exchanges(htc_reactor, elec, tap_water, co2_air, co_air,
@@ -435,116 +488,58 @@ def build_htc_reactor_exchanges(htc_reactor, elec, tap_water, co2_air, co_air,
         htc_reactor.new_exchange(input=dewatering_activity, amount=m_digestate_for_htc / 1000,
                                   type="technosphere", unit="cubic meter").save()
         pw_wastewater_m3 = PW_yield / 1000.0
-        htc_reactor.new_exchange(input=wastewater_treat, amount=pw_wastewater_m3,
+        htc_reactor.new_exchange(input=wastewater_treat, amount=_wastewater_amount(wastewater_treat, pw_wastewater_m3, "HTC PW (B)"),
                                   type="technosphere", unit="cubic meter").save()
         print(f"[Pathway B] Dewatered cake -> HTC reactor: {m_digestate_for_htc:.4f} kg")
         print(f"[Pathway B] HTC PW -> wastewater: {pw_wastewater_m3:.5f} m³")
 
 
-def build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3):
-    drying.new_exchange(input=drying_heat, amount=elec_MJ,
-                         type="technosphere", unit="megajoule").save()
-    drying.new_exchange(input=wastewater_treat, amount=wastewater_m3,
-                         type="technosphere", unit="cubic meter").save()
+def build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3,
+                           fan_kWh=0.0):
+    """
+    elec_MJ: dryer heat supplied by the utility (MJ), from hi.dryer_duty().
+    If drying_heat is an electricity market (kWh), the heat is direct
+    electric air heating (1 kWh = 3.6 MJ). fan_kWh: dryer fan, belt drive and
+    filter press electricity. Wastewater is written only for a condensing
+    dryer.
+    """
+    is_kwh = drying_heat.get("unit", "") == "kilowatt hour"
+    if elec_MJ > 0:
+        drying.new_exchange(input=drying_heat, amount=elec_MJ / 3.6 if is_kwh else elec_MJ,
+                             type="technosphere", unit="kilowatt hour" if is_kwh else "megajoule").save()
+    if fan_kWh > 0:
+        drying.new_exchange(input=elec, amount=fan_kWh,
+                             type="technosphere", unit="kilowatt hour").save()
+    if wastewater_m3 > 0:
+        drying.new_exchange(input=wastewater_treat, amount=_wastewater_amount(wastewater_treat, wastewater_m3, "dryer condensate"),
+                             type="technosphere", unit="cubic meter").save()
 
-
-def build_coal_substitution_exchange(sub_heat_coal, coal_heat):
-    sub_heat_coal.new_exchange(input=coal_heat, amount=1,
-                                type="technosphere", unit="megajoule").save()
-
-
-def build_hydrochar_heat_exchanges(hc_heat, coal_heat, bios, S_char_pct, N_char_pct,
-                                    Ash_char_pct, HHV_char):
-    SO2_per_MJ = (S_char_pct / 100) * (64 / 32) / HHV_char
-    NOx_per_MJ = (N_char_pct / 100) * (46 / 14) / HHV_char
-
-    Ash_coal_pct = 10.0
-    PM_scale = (Ash_char_pct / Ash_coal_pct) if Ash_coal_pct > 0 else 1.0
-
-    print(f"[HC heat] SO₂ = {SO2_per_MJ:.6f} kg/MJ  "
-          f"(S_char={S_char_pct:.2f}%  HHV={HHV_char:.2f} MJ/kg)")
-    print(f"[HC heat] NOx = {NOx_per_MJ:.6f} kg/MJ  "
-          f"(N_char={N_char_pct:.2f}%  HHV={HHV_char:.2f} MJ/kg)")
-    print(f"[HC heat] PM  scale = {PM_scale:.3f}  "
-          f"(Ash_char={Ash_char_pct:.2f}%  Ash_coal={Ash_coal_pct:.1f}%)")
-
-    so2_flow = [f for f in bios if "Sulfur dioxide" in f["name"]
-                and "air" in f["categories"]][0]
-    nox_flow = [f for f in bios if "Nitrogen oxides" in f["name"]
-                and "air" in f["categories"]][0]
-
-    so2_written = False
-    nox_written = False
-
-    for exc in coal_heat.exchanges():
-        if exc["type"] == "technosphere":
-            hc_heat.new_exchange(input=exc.input, amount=0,
-                                  type="technosphere", unit=exc["unit"]).save()
-
-        elif exc["type"] == "biosphere":
-            name = exc.input["name"].lower()
-
-            if any(w in name for w in [
-                "radioactive", "uranium", "radon", "thorium", "lead-210", "polonium",
-                "arsenic", "cadmium", "mercury", "antimony", "chromium", "nickel",
-                "molybdenum", "vanadium", "thallium", "tin", "beryllium",
-                "phosphorus", "dioxin", "benzene", "toluene", "xylene", "pa", "nmvoc"]):
-                continue
-
-            if "carbon dioxide, fossil" in name:
-                nonf = [f for f in bios if f["name"] == "Carbon dioxide, non-fossil"
-                        and "air" in f["categories"]][0]
-                hc_heat.new_exchange(input=nonf, amount=exc["amount"],
-                                      type="biosphere", unit=exc["unit"]).save()
-
-            elif "carbon monoxide, fossil" in name:
-                nonf = [f for f in bios if f["name"] == "Carbon monoxide, non-fossil"
-                        and "air" in f["categories"]][0]
-                hc_heat.new_exchange(input=nonf, amount=exc["amount"],
-                                      type="biosphere", unit=exc["unit"]).save()
-
-            elif "methane, fossil" in name:
-                nonf = [f for f in bios if f["name"] == "Methane, non-fossil"
-                        and "air" in f["categories"]][0]
-                hc_heat.new_exchange(input=nonf, amount=exc["amount"],
-                                      type="biosphere", unit=exc["unit"]).save()
-
-            elif "sulfur dioxide" in name:
-                if not so2_written:
-                    hc_heat.new_exchange(input=so2_flow, amount=SO2_per_MJ,
-                                          type="biosphere", unit="kilogram").save()
-                    so2_written = True
-
-            elif "nitrogen oxides" in name:
-                if not nox_written:
-                    hc_heat.new_exchange(input=nox_flow, amount=NOx_per_MJ,
-                                          type="biosphere", unit="kilogram").save()
-                    nox_written = True
-
-            elif "particulate" in name:
-                hc_heat.new_exchange(input=exc.input, amount=exc["amount"] * PM_scale,
-                                      type="biosphere", unit=exc["unit"]).save()
 
 
 def build_ad_exchanges(ad_process, bios, ei, CH4_mass, NH3_mass, m_AD_in,
                         adm1_mode, PATHWAY, ad_elec, ad_heat,
                         wastewater_treat=None, digestate_mass=None,
-                        dilution_water_m3=0.0, tap_water=None):
-    f_fug_CH4 = 0.02
-    f_fug_NH3 = 0.05
+                        dilution_water_m3=0.0, tap_water=None,
+                        T_AD_in_C=None, Q_rec_avail_MJ=0.0):
+    f_fug_CH4 = 0.02          # 2 % of CH4 produced, threshold of Liebetrau et al. (2017)
+    f_fug_NH3 = 0.05          # 5 % of gaseous NH3, model default (assumption)
     CH4_fug = CH4_mass * f_fug_CH4
     NH3_fug = NH3_mass * f_fug_NH3
 
-    ch4_air = [a for a in bios if "Methane, non-fossil" in a["name"] and "air" in a["categories"]][0]
-    nh3_air = [a for a in bios if "Ammonia" in a["name"] and "air" in a["categories"]][0]
+    # exact (name, compartment) lookup (bw_lookup.get_flow)
+    ch4_air = get_flow("Methane, non-fossil", ("air",), CORE_FLOW_LOCATIONS)
+    nh3_air = get_flow("Ammonia", ("air",), CORE_FLOW_LOCATIONS)
 
     ad_process.new_exchange(input=ch4_air, amount=CH4_fug, type="biosphere", unit="kilogram").save()
     ad_process.new_exchange(input=nh3_air, amount=NH3_fug, type="biosphere", unit="kilogram").save()
 
-    e_heat_AD = 0.1
+    # AD heat: sensible heat of the inflow to T_DIG_C plus losses, minus heat
+    # recovered from the HTC product (heat_integration.ad_duty).
+    # AD electricity: 0.006 kWh per kg of digester inflow, derived from
+    # Berglund and Boerjesson (2006), Table 5.
     e_elec_AD = 0.006
-
-    Q_heat_AD_MJ = m_AD_in * e_heat_AD
+    _ad = hi.ad_duty(m_AD_in, T_in_C=T_AD_in_C, Q_rec_avail_MJ=Q_rec_avail_MJ)
+    Q_heat_AD_MJ = _ad["Q_AD_util_MJ"]
     E_elec_AD_kWh = m_AD_in * e_elec_AD
 
     ad_process.new_exchange(input=ad_elec, amount=E_elec_AD_kWh, type="technosphere", unit="kilowatt hour").save()
@@ -558,14 +553,14 @@ def build_ad_exchanges(ad_process, bios, ei, CH4_mass, NH3_mass, m_AD_in,
         print(f"⚠️  [AD LCA] dilution_water_m3={dilution_water_m3*1000:.1f} kg "
               f"but tap_water activity not passed — exchange skipped")
 
-    print(f"[AD energy | {adm1_mode}] m_AD_in={m_AD_in:.3f} kg | "
-          f"Heat={Q_heat_AD_MJ:.4f} MJ | Elec={E_elec_AD_kWh:.4f} kWh")
+    print(f"[AD energy | {adm1_mode}] m_AD_in={m_AD_in:.3f} kg | T_in={_ad['T_AD_in_C']} C | "
+          f"Heat={Q_heat_AD_MJ:.4f} MJ (recovered {_ad['Q_AD_rec_MJ']:.2f}) | Elec={E_elec_AD_kWh:.4f} kWh")
 
     if PATHWAY == "A" and wastewater_treat is not None and digestate_mass is not None:
-        ad_process.new_exchange(input=wastewater_treat, amount=digestate_mass / 1000,
+        ad_process.new_exchange(input=wastewater_treat, amount=_wastewater_amount(wastewater_treat, digestate_mass / 1000, "AD effluent (A)"),
                                  type="technosphere", unit="cubic meter").save()
 
-    return CH4_fug, NH3_fug, Q_heat_AD_MJ, E_elec_AD_kWh
+    return CH4_fug, NH3_fug, Q_heat_AD_MJ, E_elec_AD_kWh, _ad
 
 
 def build_dewatering_exchanges(dewatering, elec, wastewater_treat,
@@ -573,12 +568,23 @@ def build_dewatering_exchanges(dewatering, elec, wastewater_treat,
                                 ad_process, m_digestate_total):
     dewatering.new_exchange(input=elec, amount=E_centrifuge_kWh,
                              type="technosphere", unit="kilowatt hour").save()
-    dewatering.new_exchange(input=wastewater_treat, amount=centrate_m3,
+    dewatering.new_exchange(input=wastewater_treat, amount=_wastewater_amount(wastewater_treat, centrate_m3, "centrate (B)"),
                              type="technosphere", unit="cubic meter").save()
     print(f"[Dewatering] Elec={E_centrifuge_kWh:.3f} kWh  Centrate→WWT={centrate_m3:.4f} m³")
 
 
-def build_biogas_upgrading_exchanges(biogas_upgrading, psa_ref, ei, biomethane_m3):
+def location_priority(ctx):
+    """Dataset location priority of the study: ctx.location_priority, or the
+    location code followed by CA (Canadian provinces only), RoW and GLO
+    (CA-QC when no code is set)."""
+    if ctx.location_priority:
+        return list(ctx.location_priority)
+    code = ctx.location_code or "CA-QC"
+    extra = ("CA", "RoW", "GLO") if code.startswith("CA-") else ("RoW", "GLO")
+    return [code] + [c for c in extra if c != code]
+
+
+def build_biogas_upgrading_exchanges(biogas_upgrading, psa_ref, ei, biomethane_m3, priority):
     for exc in psa_ref.exchanges():
         exc_type = exc["type"]
         exc_input = exc.input
@@ -593,24 +599,355 @@ def build_biogas_upgrading_exchanges(biogas_upgrading, psa_ref, ei, biomethane_m
 
         if exc_type == "technosphere":
             query = exc_input["name"]
-            if "electricity" in query.lower():
-                matches = [a for a in ei.search("market for electricity, low voltage")
-                           if "CA-QC" in a.get("location", "")]
-            else:
-                matches = [a for a in ei.search(query) if "CA-QC" in a.get("location", "")]
-                if not matches:
-                    matches = [a for a in ei.search(query)
-                               if any(t in a.get("location", "") for t in ["GLO", "RoW", "RER"])]
-            regional = matches[0] if matches else exc_input
+            search_query = "market for electricity, low voltage" if "electricity" in query.lower() else query
+            # deterministic exact-name lookup, study location first
+            regional = bwl._regional_equivalent(ei, search_query, priority)
+            if regional is None:
+                regional = exc_input
             biogas_upgrading.new_exchange(input=regional, amount=exc_amount * biomethane_m3,
                                            type=exc_type, unit=exc_unit).save()
         elif exc_type == "biosphere":
-            biogas_upgrading.new_exchange(input=exc_input, amount=exc_amount * biomethane_m3,
+            # The dataset's own methane slip is skipped: plant methane losses
+            # are counted by f_fug_CH4 in build_ad_exchanges. The 3 % of CH4
+            # not recovered by the PSA (PSA_CH4_recovery 0.97) goes to the
+            # off-gas oxidizer.
+            if name_lower.startswith("methane, non-fossil"):
+                continue
+            biogas_upgrading.new_exchange(input=relocate_flow(exc_input, CORE_FLOW_LOCATIONS),
+                                           amount=exc_amount * biomethane_m3,
                                            type=exc_type, unit=exc_unit).save()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SPIN-UP  (formerly notebook Cell 10, part 1)
+# HYDROCHAR END USE: INDUSTRIAL HEAT IN QUEBEC
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Flows of the coal furnace template not transferred to hydrochar combustion:
+# coal-specific trace elements, radionuclides and organics that HADES cannot
+# predict for hydrochar. Matched on whole words.
+_COMBUSTION_SKIP_WORDS = [
+    "radioactive", "uranium", "radon", "thorium", "lead-210", "polonium",
+    "arsenic", "cadmium", "mercury", "antimony", "chromium", "nickel",
+    "molybdenum", "vanadium", "thallium", "tin", "beryllium",
+    "phosphorus", "dioxin", "dioxins", "benzene", "toluene", "xylene",
+    "pah", "polycyclic", "nmvoc",
+]
+
+
+_SKIP_RE = _re.compile(r"\b(" + "|".join(_re.escape(w) for w in _COMBUSTION_SKIP_WORDS) + r")\b")
+
+
+def build_hydrochar_combustion_exchanges(hc_heat, coal_heat, bios, SO2_per_MJ,
+                                          NOx_per_MJ, CO2_bio_per_MJ, Ash_char_pct,
+                                          locations=None, pm_scale=None):
+    """
+    1 MJ of useful heat from dried hydrochar. Template: hard coal industrial
+    furnace 1-10 MW, with hydrochar-specific emissions:
+      CO2        biogenic, from the hydrochar carbon
+      SO2, NOx   from the hydrochar S and N (NOx with the fuel-N conversion of
+                 hydrochar_enduse), capped at the emission limit values
+      CO, CH4    coal furnace factors, as non-fossil flows
+      N2O        coal furnace factor
+      PM         coal furnace factors x Ash_char / Ash_coal, capped
+    Technosphere inputs of the template (coal supply, etc.) are set to zero:
+    the fuel is the foreground hydrochar. Per-MJ factors are computed as (mass
+    per FU) / (MJ delivered per FU).
+    """
+    Ash_coal_pct = 10.0
+    PM_scale = (Ash_char_pct / Ash_coal_pct) if Ash_coal_pct > 0 else 1.0
+    # SO2, NOx and PM arrive already capped at the emission limit values
+    # (hydrochar_enduse); pm_scale is the multiplier on the template PM flows.
+    if pm_scale is not None:
+        PM_scale = float(pm_scale)
+    # Emission compartments are copied from the coal furnace template, so the
+    # hydrochar and the displaced fuel are characterized alike; `locations`
+    # selects location-named flows in regionalized projects.
+    locations = locations or CORE_FLOW_LOCATIONS
+    so2_flow = get_flow("Sulfur dioxide", _template_cats(coal_heat, "Sulfur dioxide"), locations)
+    nox_flow = get_flow("Nitrogen oxides", _template_cats(coal_heat, "Nitrogen oxides"), locations)
+    co2_nf = get_flow("Carbon dioxide, non-fossil", ("air",), locations)
+    co_nf = get_flow("Carbon monoxide, non-fossil", _template_cats(coal_heat, "Carbon monoxide, fossil"), locations)
+    ch4_nf = get_flow("Methane, non-fossil", _template_cats(coal_heat, "Methane, fossil"), locations)
+
+    hc_heat.new_exchange(input=so2_flow, amount=SO2_per_MJ, type="biosphere", unit="kilogram").save()
+    hc_heat.new_exchange(input=nox_flow, amount=NOx_per_MJ, type="biosphere", unit="kilogram").save()
+    hc_heat.new_exchange(input=co2_nf, amount=CO2_bio_per_MJ, type="biosphere", unit="kilogram").save()
+
+    for exc in coal_heat.exchanges():
+        if exc["type"] == "technosphere":
+            hc_heat.new_exchange(input=exc.input, amount=0, type="technosphere", unit=exc["unit"]).save()
+            continue
+        if exc["type"] != "biosphere":
+            continue
+        name = exc.input["name"].lower()
+        if _SKIP_RE.search(name):
+            continue
+        if "carbon dioxide" in name or "sulfur dioxide" in name or "nitrogen oxides" in name:
+            continue  # written above from hydrochar composition
+        if "carbon monoxide, fossil" in name:
+            hc_heat.new_exchange(input=co_nf, amount=exc["amount"], type="biosphere", unit=exc["unit"]).save()
+        elif "methane, fossil" in name:
+            hc_heat.new_exchange(input=ch4_nf, amount=exc["amount"], type="biosphere", unit=exc["unit"]).save()
+        elif "dinitrogen monoxide" in name:
+            hc_heat.new_exchange(input=relocate_flow(exc.input, locations), amount=exc["amount"],
+                                  type="biosphere", unit=exc["unit"]).save()
+        elif "particulate" in name:
+            # PM flows follow the hydrochar emission location
+            hc_heat.new_exchange(input=relocate_flow(exc.input, locations), amount=exc["amount"] * PM_scale,
+                                  type="biosphere", unit=exc["unit"]).save()
+    print(f"[HC combustion '{hc_heat['name']}'] SO2={SO2_per_MJ:.2e}  NOx={NOx_per_MJ:.2e}  "
+          f"CO2bio={CO2_bio_per_MJ:.3f} kg/MJ  PM scale={PM_scale:.2f}  "
+          f"flows -> '{so2_flow['name']}' {tuple(so2_flow['categories'])}")
+
+
+def build_heat_mix_exchanges(mix_act, components, shares):
+    """
+    1 MJ of an industrial combustion heat mix =
+        sum over groups g, datasets d in g of  share_g x weight_d x 1 MJ(d)
+    components: {group: [(activity, weight normalized within group)]}
+    """
+    missing = [k for k in shares if k not in components or components[k] is None]
+    if missing:
+        raise ValueError(f"Heat mix '{mix_act['name']}': no dataset resolved for {missing}")
+    # the rounded shares sum to 0.999; renormalize so that 1 MJ of hydrochar
+    # heat displaces exactly 1 MJ of the mix
+    total = float(sum(shares.values()))
+    if abs(total - 1.0) > 0.01:
+        raise ValueError(f"Heat mix shares sum to {total:.3f}, not ~1")
+    for k, share in shares.items():
+        if share <= 0:
+            continue
+        for act, w in components[k]:
+            mix_act.new_exchange(input=act, amount=float(share) / total * float(w),
+                                  type="technosphere", unit="megajoule").save()
+
+
+def _waste_input_amount(waste_act, mass_kg):
+    """
+    Amount to write for a waste sent to an ecoinvent waste treatment/market.
+    ecoinvent waste treatments usually carry a NEGATIVE production amount
+    (-1 kg) after import; the consumer's exchange must then be negative too
+    for the treatment burden to come out positive. Reading the sign from the
+    dataset makes this correct whichever convention your import used.
+    """
+    prod = [e for e in waste_act.exchanges() if e["type"] == "production"]
+    sign = np.sign(prod[0]["amount"]) if prod else 1.0
+    return float(mass_kg) * (sign if sign != 0 else 1.0)
+
+
+def _wastewater_amount(wastewater_treat, volume_m3, where):
+    """
+    Amount for a wastewater stream sent to ecoinvent "treatment of wastewater,
+    average" (production -1 m3), with the sign read from the dataset through
+    _waste_input_amount. Checks that the volume is >= 0 and that the written
+    amount has the sign of the dataset's production exchange.
+    """
+    if not np.isfinite(volume_m3) or volume_m3 < 0:
+        raise ValueError(f"[_wastewater_amount | {where}] invalid wastewater volume {volume_m3} m3")
+    amt = _waste_input_amount(wastewater_treat, volume_m3)
+    prod = [e["amount"] for e in wastewater_treat.exchanges() if e["type"] == "production"]
+    if prod and volume_m3 > 0 and np.sign(amt) != np.sign(prod[0]):
+        raise ValueError(f"[_wastewater_amount | {where}] amount {amt} has the wrong sign "
+                         f"for a treatment with production {prod[0]}")
+    return amt
+
+
+def build_hydrochar_enduse_exchanges(ctx, q, bios):
+    """
+    Hydrochar heat in Quebec. heat_prod = 1 MJ of heat from hydrochar (coal furnace
+    template, hydrochar emissions, capped at the emission limit values);
+    qc_heat_mix = 1 MJ of the Quebec industrial combustion heat mix.
+    waste_treatment demands +MJ_hydrochar of heat_prod and -MJ_hydrochar of
+    qc_heat_mix (written in build_system). Boiler ash goes to ctx.ash_disposal
+    through waste_treatment when one is configured.
+    """
+    if ctx.qc_heat_mix is None or ctx.heat_mix_components_qc is None:
+        raise ValueError("[hydrochar end use] ctx.qc_heat_mix / ctx.heat_mix_components_qc not set: "
+                         "run the notebook cell that creates the Quebec heat mix.")
+    for act in (ctx.qc_heat_mix, ctx.heat_prod):
+        for exc in list(act.exchanges()):
+            if exc["type"] != "production":
+                exc.delete()
+    build_heat_mix_exchanges(ctx.qc_heat_mix, ctx.heat_mix_components_qc, hce.QC_HEAT_MIX)
+    build_hydrochar_combustion_exchanges(
+        ctx.heat_prod, ctx.coal_heat, bios, q["SO2_per_MJ"], q["NOx_per_MJ"],
+        q["CO2_bio_per_MJ"], q["Ash_char_pct"], locations=CORE_FLOW_LOCATIONS,
+        pm_scale=q.get("PM_scale"))
+
+# Centrifuge N split. Molar mass of N taken as 14.0 kg/kmol, consistent with
+# ad_characterization._S_IN_equiv_kmol_m3.
+N_KG_PER_KMOL = 14.0
+
+
+def split_centrifuge_N(m_digestate_total, dry_matter_kg, WC_solids,
+                       S_IN_kmol_m3, N_dig_kg, max_iter=50, tol=1e-9):
+    """
+    Split the digestate N between the two outputs of the Pathway B centrifuge:
+        * wet solids sent to HTC, at moisture WC_solids (= target_moisture_HTC)
+        * liquid sent to wastewater treatment (by difference)
+
+    Particles (and the N bound in them) go with the solids. Dissolved ammonium
+    is spread evenly through all the water, so the liquid carries
+        N_liquid = S_IN [kmol N/m3] x 14 [kg/kmol] x m_liquid [kg] / 1000
+
+    Small fixed point: removing N_liquid lowers the dry matter of the solids,
+    which lowers the solids mass at WC_solids, which raises m_liquid a little,
+    which raises N_liquid a little. The update is a strong contraction
+    (dN_new/dN = S_IN x 0.014 / (1 - WC_solids) ~ 0.01), so it converges in
+    two or three iterations.
+
+    Cap: N_liquid <= N_dig_kg. ADM1 computes S_IN from its own N content of
+    amino acids and biomass, not from the elemental N of the feed, so the two
+    can differ; the cap keeps the split physical and is printed.
+
+    Mass balance: m_solids + m_liquid = m_digestate_total exactly (the liquid
+    is computed by difference, the N mass moves with it).
+
+    Returns (m_solids_kg, m_liquid_kg, dry_matter_solids_kg, N_liquid_kg).
+    """
+    N_liq = 0.0
+    for _ in range(max_iter):
+        dry = dry_matter_kg - N_liq
+        m_sol = dry / (1.0 - WC_solids)
+        m_liq = max(0.0, m_digestate_total - m_sol)
+        N_new = min(max(0.0, S_IN_kmol_m3 * N_KG_PER_KMOL * m_liq / 1000.0), N_dig_kg)
+        if abs(N_new - N_liq) < tol:
+            N_liq = N_new
+            break
+        N_liq = N_new
+    if N_liq >= N_dig_kg - 1e-12 and N_dig_kg > 0:
+        print(f"⚠️  [centrifuge N split] ADM1 dissolved N in the liquid "
+              f"({S_IN_kmol_m3 * N_KG_PER_KMOL * m_liq / 1000.0:.2f} kg) >= digestate N "
+              f"({N_dig_kg:.2f} kg): capped, ALL N leaves with the liquid. ADM1 N "
+              f"stoichiometry and elemental N_feed disagree at this point.")
+    dry = dry_matter_kg - N_liq
+    m_sol = dry / (1.0 - WC_solids)
+    m_liq = m_digestate_total - m_sol
+    return m_sol, m_liq, dry, N_liq
+
+
+def dried_basis_for_htc(dp, NH4_kg, m_wet_kg):
+    """
+    Composition of the wet digestate cake as a dried sample, for the HTC
+    surrogate. The surrogate was trained on
+    ultimate analyses of dried samples; drying digestate (pH > 7) drives
+    80-97 % of its ammonium off as NH3 (Maurer & Mueller 2012, Eng. Life
+    Sci. 12:321; Pantelopoulos et al. 2016, Waste Manag. 48:218; Liu et al.
+    2021, Nitrogen 2:287). The cake's dissolved ammonium (NH4_kg, kg N) is
+    removed from the solids: it is liquid, passes HTC as NH4+ (process water
+    pH 4.5-6.5 << pKa 9.25) and is added to the process-water N by the caller.
+    dp: digestate dict after the centrifuge split (_C_dig_kg ... _Ash_dig_kg,
+    _N_dig_kg = N left in the cake, _fc_ratio); m_wet_kg: wet cake mass.
+    Returns dp with dried-basis X_feed %, FC/VM, WC (ammonium now counted
+    with the water) and _m_dry_htc_kg, _N_org_htc_kg, _NH4_to_PW_kg.
+    """
+    kg = {e: float(dp[f"_{e}_dig_kg"]) for e in ("C", "H", "O", "S", "Ash")}
+    kg["N"] = float(dp["_N_dig_kg"]) - float(NH4_kg)
+    if NH4_kg < 0 or kg["N"] < -1e-6:
+        raise ValueError(f"[HTC DRIED BASIS] ammonium {NH4_kg:.3f} kg > cake N {dp['_N_dig_kg']:.3f} kg")
+    kg["N"] = max(kg["N"], 0.0)
+    total = sum(kg.values())
+    if not 0 < total < m_wet_kg:
+        raise ValueError(f"[HTC DRIED BASIS] dried mass {total:.2f} kg vs wet cake {m_wet_kg:.2f} kg")
+    out = dict(dp)
+    for e in ("C", "H", "O", "N", "S", "Ash"):
+        out[f"{e}_feed"] = kg[e] / total * 100.0
+    fc, vm = ac.proximate_from_fc_ratio(out["Ash_feed"], dp["_fc_ratio"])
+    out["FC_feed"], out["VM_feed"] = fc, vm
+    out["WC"] = 100.0 * (1.0 - total / m_wet_kg)
+    out["_m_dry_htc_kg"] = total
+    out["_N_org_htc_kg"] = kg["N"]
+    out["_NH4_to_PW_kg"] = float(NH4_kg)
+    return out
+
+
+def _clamp_report(label, **raw_kg):
+    """
+    The process water elements are computed by difference,
+    X_pw = X_feed - X_char - X_gas, and clamped at zero. A negative difference
+    means the surrogate put more of that element in the char and gas than the
+    feed contained. Returns the clamped elements as "C;N" text (empty if none)
+    for the pw_clamped_elements column and prints the size of each clamp.
+    """
+    neg = {k: v for k, v in raw_kg.items() if v < 0}
+    if neg:
+        txt = ", ".join(f"{k}={v:.3f} kg" for k, v in neg.items())
+        print(f"⚠️  [{label}] PW element(s) clamped to 0 (char + gas > feed): {txt}")
+    return ";".join(neg)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHYSICAL QUALITY CHECKS, run at the end of every build_system.
+# A failed check is written to waste_treatment["qa_flags"] and printed; it
+# never passes silently. Mass and energy balance failures RAISE.
+# ─────────────────────────────────────────────────────────────────────────────
+# Plausibility ranges: 1st-99th percentiles of the surrogate training targets
+# (938 rows, 122 studies).
+QA_RANGES_CHAR = {
+    "Y_char (%)": (17.7, 90.9),
+    "HHV_char (MJ/kg)": (9.7, 33.3),
+    "HC_atomic": (0.64, 1.97),
+    "OC_atomic": (0.07, 0.83),
+}
+# Biogas CH4 volume fraction of anaerobic digestion: 40-75 % (Ryckebosch,
+# Drouillon & Vervaeren 2011, Biomass and Bioenergy 35:1633-1645, Table 1).
+QA_RANGE_CH4_VOL = (0.40, 0.75)
+QA_MB_REL_TOL = 1e-6          # reactor mass balances, relative to m_ref
+QA_ENERGY_REL_TOL = 1e-6      # heat cascade closure, relative to Q_HTC_gross
+
+
+def qa_checks(PATHWAY, inv, mb, ad_hi, CH4_mass, CO2_mass, MB, m_ref,
+              energy_residual=None):
+    """Return a list of flag strings (empty = all checks passed).
+    Raises RuntimeError for a mass or energy balance that does not close."""
+    flags = []
+    # (a) mass balances (exact by construction: a failure is a code error)
+    for v in MB:
+        if v is not None and abs(float(v)) > QA_MB_REL_TOL * m_ref:
+            raise RuntimeError(f"[QA build_system] reactor mass balance residual {v:.3e} kg "
+                               f"> {QA_MB_REL_TOL * m_ref:.1e} kg")
+    # (b) energy closure of the HTC heat cascade (heat_integration.metadata)
+    gross = abs(float((mb.get("heat_htc") or {}).get("Q_HTC_gross_MJ") or 0.0))
+    if energy_residual is not None and abs(float(energy_residual)) > QA_ENERGY_REL_TOL * max(gross, 1.0):
+        raise RuntimeError(f"[QA build_system] heat cascade closure residual "
+                           f"{energy_residual:.3e} MJ > tol")
+    # (c) physical bounds
+    if mb["PW_yield"] < 0:
+        flags.append(f"PW_yield {mb['PW_yield']:.2f} kg < 0")
+    for k in ("C_char (%)", "H_char (%)", "O_char (%)", "N_char (%)", "S_char (%)", "Ash_char (%)"):
+        v = float(inv.get(k, float("nan")))
+        if not 0.0 <= v <= 100.0:
+            flags.append(f"{k} = {v:.2f} outside [0, 100]")
+    for T in (mb.get("T_prod1_C"), mb.get("T_prod2_C"), (ad_hi or {}).get("T_AD_in_C")):
+        if T is not None and not hi.T_AMB_C - 1e-9 <= T <= 374.0:
+            flags.append(f"stream temperature {T:.1f} C outside [T_amb, 374]")
+    # (d) applicability / plausibility vs the training data
+    C, H, O = (float(inv.get(k, float("nan"))) for k in ("C_char (%)", "H_char (%)", "O_char (%)"))
+    vals = {"Y_char (%)": float(inv.get("Y_char (%)", float("nan"))),
+            "HHV_char (MJ/kg)": float(inv.get("HHV_char (MJ/kg)", float("nan"))),
+            "HC_atomic": (H / 1.008) / (C / 12.011) if C > 0 else float("nan"),
+            "OC_atomic": (O / 15.999) / (C / 12.011) if C > 0 else float("nan")}
+    for k, (lo, hi_) in QA_RANGES_CHAR.items():
+        if not lo <= vals[k] <= hi_:
+            flags.append(f"{k} = {vals[k]:.3f} outside training p1-p99 [{lo}, {hi_}]")
+    if inv.get("in_training_range") is False:
+        flags.append(f"HTC surrogate extrapolation: {inv.get('domain_violations', '')}")
+    if inv.get("mass_balance_note"):
+        flags.append(f"HTC surrogate: {inv['mass_balance_note']}")
+    if (inv.get("C_recovery_raw") or 0.0) > 1.0:
+        flags.append(f"carbon balance: char C recovery {inv['C_recovery_raw']:.3f} > 1")
+    # (e) biogas composition (ideal gas, 22.414 L/mol at 0 C, 1 atm)
+    n_ch4, n_co2 = CH4_mass / 16.043, CO2_mass / 44.009
+    if n_ch4 + n_co2 > 0:
+        y = n_ch4 / (n_ch4 + n_co2)
+        if not QA_RANGE_CH4_VOL[0] <= y <= QA_RANGE_CH4_VOL[1]:
+            flags.append(f"biogas CH4 {y:.3f} vol outside {QA_RANGE_CH4_VOL} (Ryckebosch et al. 2011)")
+    return flags
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SPIN-UP
 # ─────────────────────────────────────────────────────────────────────────────
 
 def spinup_ss_state(ctx: SystemContext, pathway: str,
@@ -620,8 +957,8 @@ def spinup_ss_state(ctx: SystemContext, pathway: str,
                      TS_target: float = 0.08,
                      ml_module: str = None) -> dict:
     """
-    Run a single ADM1 spin-up to get a properly adapted SS state for
-    `pathway`, then pass the result as adm1_ss_state to build_system().
+    ADM1 spin-up to an adapted steady state for `pathway`; pass the result
+    as adm1_ss_state to build_system().
 
     ml_module may be a bare module name (already on sys.path) or a
     filesystem path ending in .py (spaces in the filename are fine).
@@ -672,7 +1009,7 @@ def spinup_ss_state(ctx: SystemContext, pathway: str,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BUILD SYSTEM  (formerly notebook Cell 10, part 2 — the orchestrator)
+# BUILD SYSTEM
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_system(ctx: SystemContext,
@@ -694,8 +1031,7 @@ def build_system(ctx: SystemContext,
     -------
     waste_treatment, ss_state, adm1_out, feed_inputs, inv
     """
-    # ── Unpack context into local names (keeps body identical to the
-    #    original notebook logic — only the *source* of these values changed) ──
+    # ── unpack the context ──────────────────────────────────────
     PATHWAY = ctx.PATHWAY
     m_feedstock = ctx.m_feedstock
     default_params = ctx.default_params
@@ -734,7 +1070,7 @@ def build_system(ctx: SystemContext,
     if ISR_batch is None:
         ISR_batch = ctx.ISR_batch
 
-    # ── CLEAR ALL FOREGROUND ACTIVITIES BEFORE REBUILDING ────────
+    # ── clear all foreground activities before rebuilding ────────
     db = bd.Database(FOREGROUND_DB)
     for act in db:
         for exc in list(act.exchanges()):
@@ -742,10 +1078,10 @@ def build_system(ctx: SystemContext,
                 exc.delete()
     print(f"🧹 Cleared all exchanges in '{FOREGROUND_DB}'")
 
-    # ── Load ML module ──────────────────────────────────────────
+    # ── load the HTC surrogate ──────────────────────────────────
     ml = _load_ml_module(ml_module)
     HTC_parametric_ML = ml.HTC_parametric_ML
-    print(f"✅ Loaded ML module from: {getattr(ml, '__file__', ml_module)}")
+    print(f"✅ Loaded ML module: {os.path.basename(getattr(ml, '__file__', ml_module))}")
     print(f"🔀 Running PATHWAY {PATHWAY}")
     print(f"⚙️  ADM1 mode: {adm1_mode}" +
           (f" | HRT={adm1_HRT_days} d" if adm1_mode == "continuous" and adm1_HRT_days else "") +
@@ -833,25 +1169,52 @@ def build_system(ctx: SystemContext,
             CO2_for_dig = CO2_mass
             NH3_for_dig = NH3_mass
 
-        digestate_params = extract_digestate_composition(
-            CH4_mass=CH4_for_dig, CO2_mass=CO2_for_dig, NH3_mass=NH3_for_dig,
-            C_feed=C_feed_mass, H_feed=H_feed_mass, O_feed=O_feed_mass,
-            N_feed=N_feed_mass, S_feed=S_feed_mass,
-            m_feedstock_wet=m_feedstock_slurry, m_feedstock_dry=m_dry_feedstock,
-        )
+        # Digestate composition from the feed, the ADM1 biogas and measured
+        # digestate coefficients (ad_characterization). Ammonium: ADM1 steady
+        # state S_IN x inflow. ADM1 computes S_IN from its own N stoichiometry,
+        # not from the elemental N of the feed; if the value is outside
+        # [0, N_feed] or there is no steady state, the measured ammonium share
+        # f_NH4 is used instead and the switch is flagged.
+        _NH4_source_B = "ADM1_S_IN"
+        try:
+            _NH4_B = ac.adm1_ammonium_kg(adm1_out, feed_inputs["_V_feed_m3"])
+        except (ValueError, KeyError, TypeError):
+            _NH4_B = None
+        if _NH4_B is None or not (0.0 <= _NH4_B <= N_feed_mass):
+            print(f"⚠️  [DIGESTATE] ADM1 ammonium {_NH4_B} kg N not usable "
+                  f"(feed N {N_feed_mass:.2f} kg): measured f_NH4 used instead")
+            _NH4_B = None
+            _NH4_source_B = "measured_f_NH4"
+        digestate_params = ac.digestate_simple(
+            ctx.feedstock_name, C_feed_mass, H_feed_mass, O_feed_mass,
+            N_feed_mass, S_feed_mass, ash_kg_feed,
+            CH4_mass, CO2_mass, m_feedstock_slurry, NH4_N_kg=_NH4_B)
+        print(f"[Pathway B | DIGESTATE] dry {digestate_params['_m_dry_kg']:.1f} kg  "
+              f"VS destroyed {digestate_params['_dg_VS_destroyed'] * 100:.1f} %  "
+              f"NH4-N {digestate_params['_NH4_N_kg']:.2f} kg ({_NH4_source_B})  "
+              f"{digestate_params['_dg_warnings']}")
+        N_dig_kg_B = digestate_params["_N_dig_kg"]
 
         # ── DEWATERING ────────────────────────────────────────────
         WC_target_dewater = target_moisture_HTC
         WC_dig_raw = digestate_params["WC"] / 100
 
         m_digestate_total = m_feedstock_slurry - CH4_mass - CO2_mass
-        dry_matter_dig = m_digestate_total * (1 - WC_dig_raw)
+        dry_matter_dig = digestate_params["_m_dry_kg"]   # exact (WC is rounded)
 
+        N_to_centrate_kg_B = 0.0
         if WC_dig_raw > WC_target_dewater:
-            m_cake = dry_matter_dig / (1 - WC_target_dewater)
-            m_centrate = m_digestate_total - m_cake
+            # dissolved ammonium leaves with the centrate water (S_IN x its
+            # volume); particles and their N go to HTC
+            m_cake, m_centrate, dry_matter_dig, N_to_centrate_kg_B = split_centrifuge_N(
+                m_digestate_total, dry_matter_dig, WC_target_dewater,
+                digestate_params["_S_IN_equiv_kmol_m3"], N_dig_kg_B)
+            digestate_params = dict(digestate_params)
+            digestate_params["_N_dig_kg"] = N_dig_kg_B - N_to_centrate_kg_B
+            print(f"[Pathway B | centrifuge N split] N to centrate {N_to_centrate_kg_B:.2f} kg, "
+                  f"N to HTC {digestate_params['_N_dig_kg']:.2f} kg (of {N_dig_kg_B:.2f} kg)")
 
-            e_centrifuge = 0.003
+            e_centrifuge = 0.003   # kWh per kg of digestate, model default (assumption)
             E_centrifuge_kWh = m_digestate_total * e_centrifuge
 
             print(f"\n[Pathway B — Dewatering]")
@@ -869,6 +1232,15 @@ def build_system(ctx: SystemContext,
             m_digestate_for_htc = m_digestate_total
             print(f"[Pathway B] No dewatering needed — WC={WC_dig_raw*100:.1f}% ≤ {WC_target_dewater*100:.0f}%")
 
+        # the surrogate was trained on dried samples: the ammonium left in the
+        # cake water is removed from the solids and joins the process water
+        # (dried_basis_for_htc)
+        NH4_cake_kg_B = max(0.0, float(digestate_params["_NH4_N_kg"]) - N_to_centrate_kg_B)
+        digestate_params = dried_basis_for_htc(digestate_params, NH4_cake_kg_B,
+                                               m_digestate_for_htc)
+        print(f"[Pathway B | HTC dried basis] ammonium {NH4_cake_kg_B:.2f} kg N -> process "
+              f"water; surrogate N {digestate_params['N_feed']:.2f} %, dry "
+              f"{digestate_params['_m_dry_htc_kg']:.1f} kg, WC {digestate_params['WC']:.2f} %")
         htc_params_B = {**ml_params, **digestate_params}
         print(f"[HTC inputs B] T={htc_params_B['T']} °C, RT={htc_params_B['RT']} min, "
               f"WC={htc_params_B['WC']:.1f}%")
@@ -885,7 +1257,11 @@ def build_system(ctx: SystemContext,
         print("\n" + "=" * 60)
         print("  PATHWAY A — Step 1: HTC ML on raw feedstock")
         print("=" * 60)
-        ml_params_htc = {**ml_params, "WC": target_moisture_HTC * 100}
+        # use the feedstock's own moisture; drier feeds are diluted with tap
+        # water to the HTC moisture target in step 2
+        WC_native = default_params["WC"] / 100.0
+        WC_reactor = max(WC_native, target_moisture_HTC)
+        ml_params_htc = {**ml_params, "WC": WC_reactor * 100.0}
         df, inv = run_ml_model(HTC_parametric_ML, params=ml_params_htc)
 
     print("\n[ML model outputs]", inv)
@@ -920,24 +1296,38 @@ def build_system(ctx: SystemContext,
 
     else:
         m_feedstock_effective = m_feedstock
-        WC_feed = inv.get("WC_feed (%)", np.nan) / 100
-        if WC_feed < target_moisture_HTC:
-            added_water = (m_feedstock * (1 - WC_feed) - m_feedstock * (1 - target_moisture_HTC)) / (1 - target_moisture_HTC)
+        if WC_native < target_moisture_HTC:
+            added_water = (m_feedstock * (1 - WC_native) - m_feedstock * (1 - target_moisture_HTC)) / (1 - target_moisture_HTC)
             added_water = max(0.0, added_water)
             m_feedstock_effective = m_feedstock + added_water
             WC_feed = target_moisture_HTC
-            print(f"Added water: {added_water:.3f} kg (to reach {target_moisture_HTC*100:.0f}% moisture)")
+            print(f"Added water: {added_water:.3f} kg (native WC={WC_native*100:.1f}% -> target {target_moisture_HTC*100:.0f}%)")
         else:
             added_water = 0.0
-            print(f"No water addition needed — WC={WC_feed*100:.1f}% ≥ target {target_moisture_HTC*100:.0f}%")
+            m_feedstock_effective = m_feedstock
+            WC_feed = WC_native
+            print(f"No water addition needed — native WC={WC_native*100:.1f}% >= target {target_moisture_HTC*100:.0f}%")
+
+        # [QA] dry matter is conserved through water addition (rel tol 1e-6)
+        _dry_in = m_feedstock * (1 - WC_native)
+        _dry_htc = m_feedstock_effective * (1 - WC_feed)
+        if abs(_dry_htc - _dry_in) > 1e-6 * max(_dry_in, 1.0):
+            raise ValueError(f"[build_system | Pathway A] dry mass not conserved through water "
+                             f"addition: {_dry_in:.4f} kg in, {_dry_htc:.4f} kg to HTC (rel tol 1e-6)")
 
     # =========================================================
     # STEP 3 — HTC MASS BALANCE & ENERGY
     # =========================================================
 
+    # HTC feed temperature. Pathway B: wet solids leaving the digestate
+    # centrifuge plus any tap water at T_amb. Pathway A: raw feedstock at
+    # T_amb (None).
+    _T_feed_HTC_C = (hi.htc_feed_temperature_B(m_digestate_for_htc, added_water)
+                     if PATHWAY == "B" else None)
     mb = compute_htc_mass_balance(
         m_feed_eff=m_feedstock_effective, WC_feed=WC_feed, Y_char_pct=Y_char_pct,
         T_HTC=T_HTC, MC_char=MC_char, target_MC_char_dry=target_MC_char_dry,
+        eps_HR=ctx.eps_HR, T_feed_C=_T_feed_HTC_C,
     )
     HC_wet_yield = mb["HC_wet_yield"]
     HC_dry_yield = mb["HC_dry_yield"]
@@ -947,13 +1337,19 @@ def build_system(ctx: SystemContext,
     Q_heat_kWh = mb["Q_heat_kWh"]
     elec_MJ = mb["elec_MJ"]
     wastewater_m3 = mb["wastewater_m3"]
+    dryer_fan_kWh = mb["dryer_fan_kWh"]   # dryer fans + filter press
+    HC_dry_mass = mb["HC_dry_mass"]
 
     print_mass_balance_diagnostic(m_feedstock_effective, mb, WC_feed)
 
-    HHV_coal = 28.0
-    coal_needed_1MJ = 0.04325
-    SubstitutionFactor_HC_COAL = HHV_char / HHV_coal
-    MJ_hydrochar = (HC_wet_yield - wastewater_m3 * 1000) / coal_needed_1MJ * SubstitutionFactor_HC_COAL
+    # Heat delivered = dry char mass x HHV_char / HHV_coal / 0.04325 kg coal
+    # per MJ (hydrochar_enduse). HHV_char is a dry-basis value, so it applies
+    # to the bone-dry char mass.
+    q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv)
+    HHV_coal = hce.HHV_COAL_MJ_PER_KG
+    coal_needed_1MJ = hce.COAL_KG_PER_MJ
+    SubstitutionFactor_HC_COAL = q_enduse["SubstitutionFactor_HC_COAL"]
+    MJ_hydrochar = q_enduse["MJ_hydrochar"]
 
     print(f"Derived yields: HC={HC_wet_yield:.3f} kg, PW={PW_yield:.3f} kg, "
           f"CO2={CO2_yield:.3f} kg, CO={CO_yield:.3f} kg")
@@ -965,7 +1361,7 @@ def build_system(ctx: SystemContext,
     inv["Y_liquid (%)"] = PW_yield / dry_mass_in * 100
 
     # =========================================================
-    # PATHWAY A — Per-tonne normalisation
+    # PATHWAY A: normalization to 1 t of feedstock
     # =========================================================
     if PATHWAY == "A":
         _scale_A = 1000.0 / m_feedstock
@@ -981,6 +1377,9 @@ def build_system(ctx: SystemContext,
         elec_MJ = elec_MJ * _scale_A
         wastewater_m3 = wastewater_m3 * _scale_A
         MJ_hydrochar = MJ_hydrochar * _scale_A
+        dryer_fan_kWh = dryer_fan_kWh * _scale_A
+        HC_dry_mass = HC_dry_mass * _scale_A
+        q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv)
 
         print(f"[per-tonne scaling A] scale={_scale_A:.5f}  FU=1 tonne wet feed")
         print(f"[per-tonne scaling A] PW_yield={PW_yield:.3f} kg/t  "
@@ -1001,7 +1400,8 @@ def build_system(ctx: SystemContext,
         N_char = inv.get("N_char (%)", np.nan)
         S_char = inv.get("S_char (%)", np.nan)
 
-        dry_fraction_A = 1 - WC_feed
+        # dry matter of the feedstock at its native moisture (before dilution)
+        dry_fraction_A = 1 - default_params["WC"] / 100.0
         _m_feed_actual = m_feedstock
 
         C_feed_mass_A = _m_feed_actual * dry_fraction_A * (default_params["C_feed"] / 100)
@@ -1027,6 +1427,11 @@ def build_system(ctx: SystemContext,
         O_pw_mass = max(0, O_feed_mass_A - (O_char_mass + O_gas_mass))
         N_pw_mass = max(0, N_feed_mass_A - N_char_mass)
         S_pw_mass = max(0, S_feed_mass_A - S_char_mass)
+        _pw_clamped = _clamp_report(
+            "Pathway A PW",
+            C=C_feed_mass_A - (C_char_mass + C_gas_mass), H=H_feed_mass_A - H_char_mass,
+            O=O_feed_mass_A - (O_char_mass + O_gas_mass), N=N_feed_mass_A - N_char_mass,
+            S=S_feed_mass_A - S_char_mass)
 
         rho_PW = 1.02
         pw_inputs = translate_pw_to_adm1(
@@ -1034,6 +1439,7 @@ def build_system(ctx: SystemContext,
             N_pw=N_pw_mass, S_pw=S_pw_mass,
             PW_yield_L=(PW_yield / _scale_A) / rho_PW,
             mode=adm1_mode, HRT_days=adm1_HRT_days, T_HTC=T_HTC,
+            RT_HTC=RT_HTC,
             ISR_batch=ISR_batch, COD_conc_target=COD_conc_target,
         )
 
@@ -1078,9 +1484,11 @@ def build_system(ctx: SystemContext,
     # STEP 6 — BIOGAS UPGRADING (PSA) & BIOMETHANE
     # =========================================================
 
-    PSA_CH4_recovery = 0.97
-    LHV_biomethane = 35
-    LHV_NG = 35
+    PSA_CH4_recovery = 0.97   # model default (assumption)
+    # LHV of methane, 35.8 MJ/Nm3. LHV_NG is used only to convert MJ to m3 in
+    # the printout; the natural gas credit is in MJ.
+    LHV_biomethane = 35.8
+    LHV_NG = 35.8
 
     CH4_m3 = CH4_mass / CH4_density
     biomethane_m3 = CH4_m3 * PSA_CH4_recovery
@@ -1096,7 +1504,24 @@ def build_system(ctx: SystemContext,
     # STEP 7 — WRITE LCA EXCHANGES
     # =========================================================
 
-    CH4_fug, NH3_fug, Q_heat_AD_MJ, E_elec_AD_kWh = build_ad_exchanges(
+    # Digester inlet temperature and recovered heat.
+    # Pathway A: process water after E2 and the letdown (<= T_SEP_C), mixed
+    # with dilution water at T_amb; E2 heat preheats the dilution water.
+    # Pathway B: raw feed at T_amb; residual product heat (down to
+    # max(T_dig + DT_min, T_SEP_C)) warms the digester feed.
+    _T_prod2_C = mb["T_prod2_C"]
+    _T_PW_AD_C = None
+    if PATHWAY == "A":
+        _T_PW_AD_C = hi.pw_temperature_after_letdown(_T_prod2_C)
+        _T_AD_in_C = hi.mix_temperature([(PW_yield, _T_PW_AD_C),
+                                         (dilution_water_PW_kg, hi.dilution_temperature())])
+        _Q_E2_A_MJ = (mb.get("heat_E2") or {}).get("Q_E2_MJ", 0.0) * _scale_A
+        _Q_rec_AD_MJ = hi.e2_heat_to_dilution_MJ(_Q_E2_A_MJ, dilution_water_PW_kg)
+    else:
+        _T_AD_in_C = hi.T_AMB_C
+        _Q_rec_AD_MJ = hi.residual_heat_to_ad_MJ(m_feedstock_effective, _T_prod2_C)
+
+    CH4_fug, NH3_fug, Q_heat_AD_MJ, E_elec_AD_kWh, ad_hi = build_ad_exchanges(
         ad_process=ad_process, bios=bios, ei=ei,
         CH4_mass=CH4_mass, NH3_mass=NH3_mass, m_AD_in=m_AD_in,
         adm1_mode=adm1_mode, PATHWAY=PATHWAY,
@@ -1106,6 +1531,7 @@ def build_system(ctx: SystemContext,
         dilution_water_m3=(pw_inputs.get("_dilution_water_m3", 0.0) * _scale_A if PATHWAY == "A"
                             else feed_inputs.get("_dilution_water_kg", 0.0) / 1000.0),
         tap_water=tap_water,
+        T_AD_in_C=_T_AD_in_C, Q_rec_avail_MJ=_Q_rec_AD_MJ,
     )
 
     if PATHWAY == "B":
@@ -1126,30 +1552,26 @@ def build_system(ctx: SystemContext,
         m_digestate_for_htc=m_digestate_for_htc if PATHWAY == "B" else None,
     )
 
-    build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3)
-    build_coal_substitution_exchange(sub_heat_coal, coal_heat)
-
-    hc_heat = heat_prod
-    for exc in list(hc_heat.exchanges()):
-        if exc["type"] != "production":
-            exc.delete()
-    build_hydrochar_heat_exchanges(
-        hc_heat, coal_heat, bios,
-        S_char_pct=inv["S_char (%)"], N_char_pct=inv["N_char (%)"],
-        Ash_char_pct=inv["Ash_char (%)"], HHV_char=inv["HHV_char (MJ/kg)"],
-    )
+    build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3,
+                           fan_kWh=dryer_fan_kWh)
+    # hydrochar heat displaces the Quebec industrial combustion heat mix;
+    # emissions capped at the emission limit values (Directive (EU) 2015/2193)
+    build_hydrochar_enduse_exchanges(ctx, q_enduse, bios)
 
     for exc in list(biogas_upgrading.exchanges()):
         if exc["type"] != "production":
             exc.delete()
-    build_biogas_upgrading_exchanges(biogas_upgrading, psa_ref, ei, biomethane_m3)
+    build_biogas_upgrading_exchanges(biogas_upgrading, psa_ref, ei, biomethane_m3,
+                                     location_priority(ctx))
 
     for exc in list(heat_biomethane.exchanges()):
         if exc["type"] != "production":
             exc.delete()
     for exc in biomethane_heat_ref.exchanges():
         if exc["type"] == "biosphere":
-            heat_biomethane.new_exchange(input=exc.input, amount=exc["amount"],
+            # biomethane combustion emissions located in Quebec (template is RoW)
+            heat_biomethane.new_exchange(input=relocate_flow(exc.input, CORE_FLOW_LOCATIONS),
+                                          amount=exc["amount"],
                                           type="biosphere", unit=exc["unit"]).save()
         elif exc["type"] == "technosphere":
             heat_biomethane.new_exchange(input=exc.input, amount=0,
@@ -1161,7 +1583,13 @@ def build_system(ctx: SystemContext,
     waste_treatment.new_exchange(input=htc_reactor, amount=1, type="technosphere", unit="unit").save()
     waste_treatment.new_exchange(input=drying, amount=1, type="technosphere", unit="unit").save()
     waste_treatment.new_exchange(input=heat_prod, amount=MJ_hydrochar, type="technosphere", unit="megajoule").save()
-    waste_treatment.new_exchange(input=sub_heat_coal, amount=-MJ_hydrochar, type="technosphere", unit="megajoule").save()
+    waste_treatment.new_exchange(input=ctx.qc_heat_mix, amount=-MJ_hydrochar, type="technosphere", unit="megajoule").save()
+    if ctx.ash_disposal is not None and q_enduse["ash_kg"] > 0:
+        waste_treatment.new_exchange(input=ctx.ash_disposal,
+                                     amount=_waste_input_amount(ctx.ash_disposal, q_enduse["ash_kg"]),
+                                     type="technosphere", unit="kilogram").save()
+    elif q_enduse["ash_kg"] > 0:
+        print(f"⚠️  [END USE] boiler ash {q_enduse['ash_kg']:.1f} kg/FU: no ash treatment configured")
     waste_treatment.new_exchange(input=ad_process, amount=1, type="technosphere", unit="unit").save()
     if PATHWAY == "B":
         waste_treatment.new_exchange(input=dewatering, amount=1, type="technosphere", unit="unit").save()
@@ -1250,11 +1678,43 @@ def build_system(ctx: SystemContext,
     waste_treatment["location_country"] = ctx.location_country
     waste_treatment["location_province"] = ctx.location_province
     waste_treatment["location_code"] = ctx.location_code
+    # heat integration, end use, digestate and QA outputs
+    _hi_extra = {"T_PW_to_AD_C": _T_PW_AD_C}
+    for _k, _v in hi.metadata(mb, ad_hi, scale=(_scale_A if PATHWAY == "A" else 1.0),
+                              extra=_hi_extra).items():
+        waste_treatment[_k] = _v
+    waste_treatment["dryer_fan_press_kWh"] = float(dryer_fan_kWh)
+    waste_treatment["E_HTC_elec_kWh"] = float(Q_heat_kWh)          # HTC reactor heating (electric)
+    waste_treatment["E_dryer_heat_kWh"] = float(elec_MJ) / 3.6     # electric belt dryer heat
+    waste_treatment["Q_heat_AD_MJ"] = float(Q_heat_AD_MJ)
+    waste_treatment["E_elec_AD_kWh"] = float(E_elec_AD_kWh)
+    waste_treatment["CH4_fugitive_kg"] = float(CH4_fug)
+    waste_treatment["HC_dry_mass_kg"] = float(HC_dry_mass)
+    waste_treatment["HHV_coal_MJ_kg"] = float(HHV_coal)
+    waste_treatment["LHV_biomethane_MJ_Nm3"] = float(LHV_biomethane)
+    waste_treatment["C_recovery_raw"] = inv.get("C_recovery_raw")
+    for _k in ("NOx_comb_kg", "SO2_comb_kg", "PM_comb_kg", "NOx_capped", "SO2_capped",
+               "PM_capped", "NOx_uncapped_mgNm3", "SO2_uncapped_mgNm3", "PM_uncapped_mgNm3",
+               "V_fluegas_Nm3", "ash_kg", "CO2_bio_kg"):
+        _v = q_enduse[_k]
+        waste_treatment[f"enduse_{_k}"] = bool(_v) if isinstance(_v, (bool, np.bool_)) else float(_v)
+    waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""
+    if PATHWAY == "B":
+        for _k in ("_NH4_N_kg", "_dg_VS_destroyed", "_dg_f_NH4", "_dg_warnings",
+                   "_m_dry_htc_kg", "_NH4_to_PW_kg"):
+            waste_treatment["dg" + _k] = digestate_params.get(_k)
+        waste_treatment["dg_NH4_source"] = _NH4_source_B
+        waste_treatment["N_to_centrate_kg"] = float(N_to_centrate_kg_B)
+    waste_treatment["qa_flags"] = "; ".join(qa_checks(
+        PATHWAY=PATHWAY, inv=inv, mb=mb, ad_hi=ad_hi, CH4_mass=CH4_mass, CO2_mass=CO2_mass,
+        MB=[waste_treatment.get(k) for k in ("MB_HTC_A", "MB_AD_A", "MB_AD_B", "MB_DW_B", "MB_HTC_B")],
+        m_ref=1000.0, energy_residual=waste_treatment.get("energy_closure_residual_MJ")))
+    print(f"[QA] flags: {waste_treatment['qa_flags'] or 'none'}")
 
     waste_treatment.save()
 
     print(f"\n✅ System '{FOREGROUND_DB}' built — PATHWAY {PATHWAY} "
-          f"— model '{ml_module}' — ADM1 mode '{adm1_mode}'")
+          f"— model '{os.path.basename(str(ml_module))}' — ADM1 mode '{adm1_mode}'")
 
     if PATHWAY == "A":
         feed_inputs = pw_inputs

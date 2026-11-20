@@ -1,12 +1,25 @@
+"""
+plot_adm1_batch.py
+==================
+Diagnostic plots of a batch (BMP) ADM1 run: blank-corrected methane yield,
+pH and the recalcitrant soluble inert sub-pools of PW-ADM1.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 def plot_adm1_results(adm1_out, adm1_out_blank, pw_inputs, V_liq, V_gas):
+    """Plot BMP, pH and S_I sub-pools of a batch run and print the final values.
+
+    adm1_out, adm1_out_blank   ADM1 outputs of the substrate and blank reactors
+    pw_inputs                  substrate inputs (unused; kept for the call signature)
+    V_liq, V_gas               liquid and headspace volumes (m3)
+    """
     df     = adm1_out["simulate_results"].copy()
     df_blk = adm1_out_blank["simulate_results"].copy()
 
-    # 1. TOTAL COD FED
+    # 1. total COD fed (kg COD/m3 at t = 0)
     S_COD_total = (df["S_su"] + df["S_aa"] + df["S_fa"] +
                    df["S_va"] + df["S_bu"] + df["S_pro"] + df["S_ac"] +
                    df["X_ch"] + df["X_pr"] + df["X_li"] + df["X_xc"] +
@@ -15,19 +28,19 @@ def plot_adm1_results(adm1_out, adm1_out_blank, pw_inputs, V_liq, V_gas):
 
     df["VFA_total"] = df["S_ac"] + df["S_pro"] + df["S_bu"] + df["S_va"]
 
-    # 2. BLANK-CORRECTED BMP
+    # 2. blank-corrected BMP; 350 000 mL CH4 (STP) per kg COD
     CH4_sub     = df["S_gas_ch4"] * V_gas
     CH4_blk     = df_blk["S_gas_ch4"] * V_gas
     CH4_net_mL  = np.maximum(0, (CH4_sub - CH4_blk)) * 350_000
     COD_fed_g   = S_COD_total * V_liq * 1000
     df["BMP"]   = CH4_net_mL / COD_fed_g if COD_fed_g > 0 else 0.0
 
-    # Convenience aggregates for plotting
+    # fast and slow sub-pool groups
     df["S_I_fast"] = df["S_I_furan"] + df["S_I_alcohol"] + df["S_I_phenol"] + df["S_I_acid"]
     df["S_I_slow"] = df["S_I_ketone"] + df["S_I_humic"]
 
-    # 3. pH
-    if "pH" in df.columns and df["pH"].iloc[1] < 2:
+    # 3. pH (from S_H_ion when the pH column is not a pH value)
+    if "pH" in df.columns and df["pH"].iloc[1] >= 2:
         df["pH_plot"] = df["pH"]
     else:
         df["pH_plot"] = -np.log10(df["S_H_ion"].clip(lower=1e-14))
@@ -59,7 +72,7 @@ def plot_adm1_results(adm1_out, adm1_out_blank, pw_inputs, V_liq, V_gas):
     plt.tight_layout()
     plt.show()
 
-    # Plot 3: Recalcitrant pools — aggregated fast/slow + individual sub-pools
+    # Plot 3: recalcitrant pools, aggregated and individual
     fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 
     axes[0].plot(t, df["S_I_fast"], label="Fast total (furan+alcohol+phenol+acid)", color="steelblue", linewidth=2)
@@ -85,7 +98,7 @@ def plot_adm1_results(adm1_out, adm1_out_blank, pw_inputs, V_liq, V_gas):
     plt.tight_layout()
     plt.show()
 
-    # Summary
+    # summary
     final = df.iloc[-1]
     print("\n" + "="*40)
     print(f"FINAL BMP:     {df['BMP'].iloc[-1]:.2f} mL/g COD")

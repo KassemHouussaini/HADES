@@ -1,0 +1,16 @@
+# Python 3.10 (version used for the paper)
+# Pinned: versions used to train the HTC surrogate (htc_xgb_models/metadata.json)
+numpy==2.2.6
+pandas==2.3.3
+scikit-learn==1.7.2
+xgboost==3.0.5
+
+# Brightway 2 (LCA). Pin with the versions from: pip show brightway2 bw2data bw2io bw2calc
+brightway2
+
+# Other dependencies. Pin with: pip freeze
+scipy
+matplotlib
+openpyxl
+streamlit
+pytest

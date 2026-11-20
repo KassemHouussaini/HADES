@@ -1,0 +1,236 @@
+{
+ "n_rows": 938,
+ "n_studies": 122,
+ "targets": {
+  "Bio_char(%)": {
+   "file": "xgb_Bio_char.json",
+   "params": {
+    "subsample": 0.7,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0,
+    "n_estimators": 1000,
+    "min_child_weight": 1,
+    "max_depth": 4,
+    "learning_rate": 0.1,
+    "colsample_bytree": 1.0
+   },
+   "n_train": 866,
+   "p1_p99": [
+    17.668499999999998,
+    90.90350000000001
+   ],
+   "search_R2_5fold": 0.8660764179809514
+  },
+  "HHVo(Mj/kg)": {
+   "file": "xgb_HHVo.json",
+   "params": {
+    "subsample": 0.9,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.5,
+    "n_estimators": 1000,
+    "min_child_weight": 7,
+    "max_depth": 6,
+    "learning_rate": 0.03,
+    "colsample_bytree": 0.8
+   },
+   "n_train": 849,
+   "p1_p99": [
+    9.68864,
+    33.293228799999994
+   ],
+   "search_R2_5fold": 0.9118147510745793
+  },
+  "Co(%)": {
+   "file": "xgb_Co.json",
+   "params": {
+    "subsample": 0.9,
+    "reg_lambda": 3.0,
+    "reg_alpha": 0.5,
+    "n_estimators": 1000,
+    "min_child_weight": 7,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "colsample_bytree": 1.0
+   },
+   "n_train": 923,
+   "p1_p99": [
+    16.7738,
+    74.6346
+   ],
+   "search_R2_5fold": 0.943616295888407
+  },
+  "Ho(%)": {
+   "file": "xgb_Ho.json",
+   "params": {
+    "subsample": 0.7,
+    "reg_lambda": 10.0,
+    "reg_alpha": 0.5,
+    "n_estimators": 600,
+    "min_child_weight": 1,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "colsample_bytree": 0.6
+   },
+   "n_train": 923,
+   "p1_p99": [
+    1.6,
+    8.7
+   ],
+   "search_R2_5fold": 0.9057181130314744
+  },
+  "No(%)": {
+   "file": "xgb_No.json",
+   "params": {
+    "subsample": 0.7,
+    "reg_lambda": 3.0,
+    "reg_alpha": 0.0,
+    "n_estimators": 600,
+    "min_child_weight": 3,
+    "max_depth": 8,
+    "learning_rate": 0.05,
+    "colsample_bytree": 0.8
+   },
+   "n_train": 923,
+   "p1_p99": [
+    0.0,
+    9.7112
+   ],
+   "search_R2_5fold": 0.9283892109020648
+  },
+  "So(%)": {
+   "file": "xgb_So.json",
+   "params": {
+    "subsample": 0.7,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0,
+    "n_estimators": 600,
+    "min_child_weight": 7,
+    "max_depth": 5,
+    "learning_rate": 0.03,
+    "colsample_bytree": 0.6
+   },
+   "n_train": 855,
+   "p1_p99": [
+    0.0,
+    1.65
+   ],
+   "search_R2_5fold": 0.8924185870479434
+  },
+  "Asho": {
+   "file": "xgb_Asho.json",
+   "params": {
+    "subsample": 0.7,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0,
+    "n_estimators": 1000,
+    "min_child_weight": 1,
+    "max_depth": 4,
+    "learning_rate": 0.1,
+    "colsample_bytree": 1.0
+   },
+   "n_train": 838,
+   "p1_p99": [
+    0.05,
+    72.941
+   ],
+   "search_R2_5fold": 0.9804202737367008
+  }
+ },
+ "features": [
+  "time (min)",
+  "temp(C)",
+  "VM(%)",
+  "FC(%)",
+  "Ci(%)",
+  "Hi(%)",
+  "Ni(%)",
+  "Si(%)",
+  "Ashi",
+  "Sv_BL"
+ ],
+ "feature_range": {
+  "time (min)": [
+   0.0,
+   1440.0
+  ],
+  "temp(C)": [
+   100.0,
+   300.0
+  ],
+  "VM(%)": [
+   36.06,
+   95.9
+  ],
+  "FC(%)": [
+   0.0,
+   36.5
+  ],
+  "Ci(%)": [
+   19.01,
+   80.74
+  ],
+  "Hi(%)": [
+   1.64,
+   8.9
+  ],
+  "Ni(%)": [
+   0.0,
+   13.1
+  ],
+  "Si(%)": [
+   0.0,
+   9.5
+  ],
+  "Ashi": [
+   0.0,
+   60.9
+  ],
+  "Sv_BL": [
+   1.0,
+   50.0
+  ]
+ },
+ "feature_p1_p99": {
+  "time (min)": [
+   5.0,
+   900.0
+  ],
+  "temp(C)": [
+   140.0,
+   300.0
+  ],
+  "VM(%)": [
+   36.2,
+   93.61999999999998
+  ],
+  "FC(%)": [
+   0.679,
+   24.3
+  ],
+  "Ci(%)": [
+   21.6,
+   54.86
+  ],
+  "Hi(%)": [
+   1.64,
+   8.270099999999998
+  ],
+  "Ni(%)": [
+   0.0937,
+   10.95
+  ],
+  "Si(%)": [
+   0.0,
+   1.73
+  ],
+  "Ashi": [
+   0.16,
+   56.5
+  ],
+  "Sv_BL": [
+   1.0,
+   23.33333333333334
+  ]
+ },
+ "environment": "Python 3.10.12, xgboost 3.0.5, scikit-learn 1.7.2, numpy 2.2.6, pandas 2.3.3"
+}

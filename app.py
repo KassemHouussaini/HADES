@@ -1,13 +1,15 @@
 """
-app.py — HTC-AD Process Simulator (Streamlit front-end)
+HADES Streamlit interface.
+
 Run with:  streamlit run app.py
 
-This app now imports ALL process logic (build_system, spinup_ss_state,
-mass balance, exchange builders, ADM1 coupling) from system_builder.py —
-the exact same module the notebook uses. Nothing about the model itself
-is duplicated here anymore. If you change the model, edit
-ADM1/system_builder.py once and both the notebook and this app pick it
-up automatically.
+The user decisions follow the article (Supporting Information, Table S1):
+process configuration, feedstock properties, HTC operating conditions, AD
+operating conditions and LCA settings (location, background database, LCIA
+method). Model defaults that are not user decisions in the article are grouped
+under "Advanced". All process logic is imported from ADM1/system_builder.py,
+the module used by the case study notebook; background datasets are selected
+with the same deterministic location-priority lookups (ADM1/bw_lookup.py).
 """
 
 import os
@@ -18,13 +20,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LOAD system_builder.py BY PATH (robust regardless of cwd / folder naming)
-# ─────────────────────────────────────────────────────────────────────────────
-
+# ---------------------------------------------------------------------------
+# Model modules, loaded by path
+# ---------------------------------------------------------------------------
 def _load_module(name, filepath):
     spec = importlib.util.spec_from_file_location(name, filepath)
     module = importlib.util.module_from_spec(spec)
@@ -34,25 +34,64 @@ def _load_module(name, filepath):
 
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-# Adjust this if your ADM1 folder is somewhere else relative to app.py
-_SYSTEM_BUILDER_PATH = os.path.join(_APP_DIR, "ADM1", "system_builder.py")
+sb = _load_module("system_builder", os.path.join(_APP_DIR, "ADM1", "system_builder.py"))
+bwl, hce, hi = sb.bwl, sb.hce, sb.hi
+ML_MODULE_PATH = os.path.join(_APP_DIR, "ML training scripts and models", "htc_surrogate.py")
 
-sb = _load_module("system_builder", _SYSTEM_BUILDER_PATH)
+# Defaults of the article's case study (background database and LCIA indicators)
+DEFAULT_EI = "ecoinvent-3.12-cutoff"
+IW_MID = "IMPACT World+ Midpoint 2.2.1_regionalized for ecoinvent v3.12"
+IW_DMG = "IMPACT World+ Damage 2.2.1_regionalized for ecoinvent v3.12"
+DEFAULT_METHODS = [(IW_MID, "Midpoint", "Climate change, short term"),
+                   (IW_DMG, "Human health", "Total human health"),
+                   (IW_DMG, "Ecosystem quality", "Total ecosystem quality")]
+FEED_PRESETS = {   # case study feedstocks, % dry basis (O by difference), moisture % wet basis
+    "Food waste (Base scenario)": dict(C=38.25, H=5.47, N=3.66, S=0.50, Ash=9.10, VM=82.6, FC=8.3, WC=85.0,
+                                       dig="food_waste"),
+    "OFMSW": dict(C=45.00, H=6.00, N=2.50, S=0.20, Ash=5.30, VM=78.0, FC=16.7, WC=70.0, dig="food_waste"),
+}
+DIGESTATE_TYPES = {"Food waste / OFMSW": "food_waste", "Dairy manure": "dairy_manure",
+                   "Sewage sludge": "sewage_sludge"}
+HTC_T_RANGE = (160, 280)    # validity of the S_I sub-pool composition (PW-ADM1)
 
-SystemContext = sb.SystemContext
-build_system = sb.build_system
-spinup_ss_state = sb.spinup_ss_state
-get_or_create = sb.get_or_create
 
-# Path to your ML model file. Spaces in the filename are fine — it's
-# loaded by path, not by module name.
-ML_MODULE_PATH = os.path.join(
-    _APP_DIR, "ML training scripts and models", "ML2 model.py"
-)
+def method_label(m):
+    return " | ".join(m)
+
+
+def ecoinvent_projects(bd):
+    """{project: [ecoinvent databases]} for the Brightway projects of this
+    computer that hold at least one ecoinvent database."""
+    out, current = {}, bd.projects.current
+    for p in sorted(pr.name for pr in bd.projects):
+        try:
+            bd.projects.set_current(p)
+            eis = sorted(d for d in bd.databases if "ecoinvent" in d.lower() and "biosphere" not in d.lower())
+        except Exception:
+            eis = []
+        if eis:
+            out[p] = eis
+    try:
+        bd.projects.set_current(current)
+    except Exception:
+        pass
+    return out
+
+
+def biosphere_of(bd, ei_name):
+    """Biosphere database the background database depends on (biosphere3 if none is declared)."""
+    deps = [d for d in bd.databases[ei_name].get("depends", []) if "biosphere" in d.lower()
+            and "spatialized" not in d.lower()]
+    return deps[0] if deps else "biosphere3"
+
+
+SETUP_HELP = ("No Brightway project with an ecoinvent database was found on this computer. "
+              "Run `python setup_hades.py` once to create a project, import ecoinvent (your own licence) "
+              "and IMPACT World+; see the README, section *Setup*.")
 
 
 def release_bw_locks():
-    """Force-close all open Brightway/peewee database connections."""
+    """Force-close open Brightway/peewee database connections."""
     try:
         import bw2data as bd
         for db_name in bd.databases:
@@ -67,17 +106,12 @@ def release_bw_locks():
             sqlite3_lci_db.close()
         except Exception:
             pass
-        try:
-            from bw2data.project import ProjectDataset
-            ProjectDataset._meta.database.close()
-        except Exception:
-            pass
     except Exception:
         pass
 
 
 # ============================================================
-# LOCATION REGISTRY — 3-level hierarchy: Country → Province → City
+# Location registry: country -> region -> ecoinvent location code and fallbacks
 # ============================================================
 
 LOCATION_HIERARCHY = {
@@ -100,7 +134,6 @@ LOCATION_HIERARCHY = {
         "California":     {"code": "US-WECC", "fallback": ["US", "RNA", "RoW", "GLO"]},
         "Texas":          {"code": "US-TRE",  "fallback": ["US", "RNA", "RoW", "GLO"]},
         "New York":       {"code": "US-NPCC", "fallback": ["US", "RNA", "RoW", "GLO"]},
-        # ... (trim as needed / keep your full list from before)
     },
     "Germany":        {"—": {"code": "DE", "fallback": ["RER", "RoW", "GLO"]}},
     "France":         {"—": {"code": "FR", "fallback": ["RER", "RoW", "GLO"]}},
@@ -109,458 +142,309 @@ LOCATION_HIERARCHY = {
     "Global":         {"—": {"code": "GLO", "fallback": ["RoW"]}},
 }
 
-PROCESS_TEMPLATES = {
-    "electricity_htc": [
-        "market for electricity, medium voltage, {loc}",
-        "market for electricity, medium voltage",
-    ],
-    "electricity_ad": [
-        "market for electricity, medium voltage, {loc}",
-        "market for electricity, medium voltage",
-    ],
-    "heat_coal": [
-        "heat production, at hard coal industrial furnace 1-10MW, {loc}",
-        "heat production, at hard coal industrial furnace 1-10MW",
-    ],
-    "heat_ng_ad": [
-        "heat production, natural gas, {loc}",
-        "heat and power co-generation, natural gas, {loc}",
-        "heat production, natural gas",
-    ],
-    "heat_ng_drying": [
-        "heat production, natural gas, {loc}",
-        "heat production, natural gas",
-    ],
-    "heat_ng_market": [
-        "market for heat, district or industrial, natural gas, {loc}",
-        "market for heat, district or industrial, natural gas",
-    ],
-    "tap_water": [
-        "market for tap water, tap water, {loc}",
-        "market for tap water, {loc}",
-        "market for tap water",
-    ],
-    "wastewater": [
-        "treatment of wastewater, average, {loc}",
-        "treatment of wastewater, {loc}",
-        "treatment of wastewater, average",
-    ],
-}
+
+def location_priority(country, province):
+    info = LOCATION_HIERARCHY.get(country, {}).get(province) or {"code": "GLO", "fallback": ["RoW"]}
+    return info["code"], [info["code"]] + list(info["fallback"])
 
 
-def resolve_provider(ei_db, template_key, loc_code, fallback_codes):
-    templates = PROCESS_TEMPLATES[template_key]
-    all_codes = [loc_code] + list(fallback_codes)
-    for code in all_codes:
-        for tmpl in templates:
-            query = tmpl.replace("{loc}", code) if "{loc}" in tmpl else tmpl
-            try:
-                results = ei_db.search(query)
-                exact = [a for a in results if a.get("location", "") == code]
-                hit = exact[0] if exact else (results[0] if results else None)
-                if hit:
-                    is_proxy = hit.get("location", "") != loc_code
-                    return hit, hit.get("location", "?"), is_proxy
-            except Exception:
-                continue
-    raise ValueError(
-        f"Could not resolve '{template_key}' for '{loc_code}' or fallbacks {fallback_codes}."
+def resolve_background(ei, prio):
+    """Background datasets of the case study notebook, chosen by location priority."""
+    find = lambda q, p=prio, nf=None: bwl.find_process(ei, q, p, name_filter=nf)
+    bg = dict(
+        elec=find("market for electricity, medium voltage", nf="market for electricity, medium voltage"),
+        coal_heat=find("heat production, at hard coal industrial furnace 1-10MW", nf="hard coal industrial furnace"),
+        ad_heat=find("heat production, natural gas", nf="heat production, natural gas"),
+        ng_heat_market=find("market for heat, district or industrial, natural gas",
+                            nf="market for heat, district or industrial, natural gas"),
+        biomethane_heat_ref=find("heat production, biomethane, at boiler condensing modulating",
+                                 ["RoW", "GLO"] + prio, nf="biomethane"),
+        tap_water=find("market for tap water", nf="market for tap water"),
+        wastewater_treat=find("treatment of wastewater, average", nf="treatment of wastewater, average"),
+        psa_ref=find("biogas purification to biomethane by pressure swing adsorption", ["RoW", "GLO"] + prio),
     )
+    bg["ad_elec"] = bg["drying_heat"] = bg["elec"]        # AD and dryer run on grid electricity
+    heat_mix = bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, hce.QC_HEAT_MIX.keys(), prio)
+    try:
+        ash = bwl.find_exact(ei, "market for wood ash mixture, pure", prio)
+    except LookupError:
+        ash = None
+    return bg, heat_mix, ash
 
 
-def resolve_all_providers(ei_db, country, province):
-    loc_info = LOCATION_HIERARCHY.get(country, {}).get(province)
-    if loc_info is None:
-        loc_info = {"code": "GLO", "fallback": ["RoW"]}
+def foreground(bd, pathway):
+    name = f"Pathway{pathway}"
+    if name not in bd.databases:
+        bd.Database(name).register()
+    db = bd.Database(name)
+    g = lambda code, label, unit: sb.get_or_create(db, code, label, unit)
+    fg = dict(
+        htc_reactor=g("htc_reactor", "HTC reactor", "unit"),
+        drying=g("hydrochar_drying", "Hydrochar drying", "unit"),
+        heat_prod=g("heat_prod_hydrochar", "Heat production from hydrochar", "megajoule"),
+        sub_heat_coal=g("substitute_heat_coal", "Hard coal heat", "megajoule"),
+        ad_process=g("anaerobic_digestion", "Anaerobic digestion (ADM1)", "unit"),
+        dewatering=g("digestate dewatering", "Digestate dewatering", "unit"),
+        biogas_upgrading=g("biogas_upgrading", "Biogas upgrading (PSA)", "unit"),
+        heat_biomethane=g("heat_biomethane", "Heat production from biomethane", "megajoule"),
+        heat_naturalgas=g("heat_naturalgas", "Natural gas heat (substituted)", "megajoule"),
+        qc_heat_mix=g("qc_industrial_heat_mix", "Industrial combustion heat mix (substituted)", "megajoule"),
+        waste_treatment=g("waste_treatment_1kg", "Waste treatment of organic waste (HTC-AD system)", "kilogram"),
+    )
+    wt0 = fg["waste_treatment"]
+    keep = {"name", "code", "unit", "database", "type", "location", "reference product", "id"}
+    for k in [k for k in list(wt0._data) if k not in keep]:
+        del wt0._data[k]
+    wt0.save()
+    return name, fg
 
-    loc_code = loc_info["code"]
-    fallbacks = loc_info["fallback"]
 
-    providers = {}
-    log_rows = []
-
-    for key in PROCESS_TEMPLATES:
-        act, resolved_loc, is_proxy = resolve_provider(ei_db, key, loc_code, fallbacks)
-        providers[key] = act
-        log_rows.append({
-            "Process": key,
-            "Activity": act["name"],
-            "Resolved location": resolved_loc,
-            "Status": "⚠️ proxy" if is_proxy else "✅ exact",
-        })
-
-    return providers, loc_code, log_rows
+def apply_preset():
+    p = FEED_PRESETS.get(st.session_state["preset"])
+    if p:
+        for k in ("C", "H", "N", "S", "Ash", "VM", "FC", "WC"):
+            st.session_state[f"feed_{k}"] = p[k]
+        st.session_state["dig_type"] = [k for k, v in DIGESTATE_TYPES.items() if v == p["dig"]][0]
 
 
 # ============================================================
-# PAGE CONFIG
+# PAGE
 # ============================================================
-st.set_page_config(page_title="HTC–AD Simulator", page_icon="⚗️", layout="wide")
-st.title("⚗️ HTC–AD Process Simulator")
-st.caption("Hydrothermal Carbonisation + Anaerobic Digestion — Mass Balance & LCA")
+st.set_page_config(page_title="HADES", page_icon="⚗️", layout="wide")
+st.title("HADES: HTC and anaerobic digestion life cycle assessment")
+st.caption("Functional unit: treatment of 1 t of wet feedstock. Negative scores are net environmental benefits.")
+
+if "preset" not in st.session_state:
+    st.session_state["preset"] = "Food waste (Base scenario)"
+    apply_preset()
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR: user decisions (article, Table S1)
 # ============================================================
 with st.sidebar:
-    st.header("🔧 Control Panel")
+    st.header("1. Process configuration")
+    PATHWAY = st.radio("Pathway", ["A", "B"],
+                       captions=["HTC, then AD of the process water", "AD, then HTC of the digestate"])
 
-    st.subheader("🌍 Plant Location")
-    _countries = [c for c in LOCATION_HIERARCHY if c not in ("Rest of World", "Global")]
-    _countries_full = _countries + ["Rest of World", "Global"]
+    st.header("2. Feedstock properties")
+    st.selectbox("Load feedstock", list(FEED_PRESETS) + ["Custom"], key="preset", on_change=apply_preset)
+    WC_feed = st.number_input("Moisture content (% wet basis)", 1.0, 99.0, step=0.5, key="feed_WC")
+    c1, c2 = st.columns(2)
+    VM_feed = c1.number_input("Volatile matter (% dry)", 0.0, 100.0, step=0.1, key="feed_VM")
+    FC_feed = c2.number_input("Fixed carbon (% dry)", 0.0, 100.0, step=0.1, key="feed_FC")
+    Ash_feed = c1.number_input("Ash (% dry)", 0.0, 100.0, step=0.1, key="feed_Ash")
+    C_feed = c2.number_input("C (% dry)", 0.0, 100.0, step=0.1, key="feed_C")
+    H_feed = c1.number_input("H (% dry)", 0.0, 100.0, step=0.01, key="feed_H")
+    N_feed = c2.number_input("N (% dry)", 0.0, 100.0, step=0.01, key="feed_N")
+    S_feed = c1.number_input("S (% dry)", 0.0, 100.0, step=0.01, key="feed_S")
+    O_feed = 100.0 - C_feed - H_feed - N_feed - S_feed - Ash_feed
+    c2.metric("O (% dry, by difference)", f"{O_feed:.2f}")
 
-    sel_country = st.selectbox("Country", options=_countries_full,
-                                index=_countries_full.index("Canada"), key="sel_country")
-    _provinces = list(LOCATION_HIERARCHY.get(sel_country, {"—": {}}).keys())
-    sel_province = st.selectbox("Province / State / Region", options=_provinces, key="sel_province")
+    st.header("3. HTC operating conditions")
+    T_HTC = st.slider("Temperature (°C)", HTC_T_RANGE[0], HTC_T_RANGE[1], 180, step=5)
+    RT_HTC = st.number_input("Residence time (min)", 5, 900, 60, step=5)
+    moist_pct = st.slider("Moisture target in the reactor (%)", 50, 95, 85,
+                          help="Sets the solid loading; drier feedstocks are diluted with tap water before HTC.")
 
-    _preview = LOCATION_HIERARCHY.get(sel_country, {}).get(sel_province, {"code": "GLO"})
-    st.caption(f"📍 ecoinvent location code: **{_preview['code']}**")
-    st.divider()
-
-    st.subheader("Process Pathway")
-    PATHWAY = st.radio("Order of operations", options=["A", "B"],
-                        captions=["HTC first → AD on process water", "AD first → HTC on digestate"])
-    st.divider()
-
-    st.subheader("Feedstock")
-    m_feedstock = st.number_input("Feedstock mass (kg wet)", value=1000.0, step=100.0, min_value=1.0)
-    WC_feed = st.slider("Moisture content — wet basis (%)", 0.0, 95.0, 75.0, step=0.5)
-
-    with st.expander("📊 Ultimate Analysis (dry basis %) — must sum to 100"):
-        C_feed = st.number_input("C %", value=47.0, step=0.1)
-        H_feed = st.number_input("H %", value=6.3, step=0.1)
-        N_feed = st.number_input("N %", value=3.5, step=0.1)
-        O_feed = st.number_input("O %", value=38.5, step=0.1)
-        S_feed = st.number_input("S %", value=0.2, step=0.05)
-        Ash_feed = st.number_input("Ash %", value=4.5, step=0.1)
-        elem_sum = C_feed + H_feed + N_feed + O_feed + S_feed + Ash_feed
-        if abs(elem_sum - 100.0) > 0.5:
-            st.error(f"⚠️ Sums to {elem_sum:.1f}% — must be 100%")
-        else:
-            st.success(f"✅ Sums to {elem_sum:.1f}%")
-
-    with st.expander("📋 Proximate Analysis (dry basis %)"):
-        V_feed = st.number_input("Volatile matter %", value=80.5, step=0.1)
-        Fc_feed = st.number_input("Fixed carbon %", value=15.0, step=0.1)
-
-    st.divider()
-    st.subheader("HTC Conditions")
-    T_HTC = st.slider("Temperature (°C)", 150, 280, 180, step=5)
-    RT_HTC = st.slider("Residence time (min)", 10, 240, 60, step=5)
-    target_moisture_HTC = st.slider("Slurry moisture target (fraction)", 0.50, 0.95, 0.80, step=0.01)
-    MC_char = st.slider("Wet hydrochar moisture (kg/kg)", 0.30, 0.90, 0.75, step=0.01)
-    target_MC_char_dry = st.slider("Dried hydrochar moisture (kg/kg)", 0.0, 0.30, 0.10, step=0.01)
-
-    st.divider()
-    st.subheader("AD Conditions")
-    adm1_mode = st.selectbox("AD Mode", ["continuous", "batch"])
-    TS_target = st.slider("Feed total solids target (kg/kg)", 0.02, 0.15, 0.08, step=0.01)
-    COD_conc_target = st.number_input("PW COD dilution target (kgCOD/m³)", value=10.0, step=1.0)
-    ISR_batch = st.number_input("Inoculum-to-substrate ratio (batch)", value=2.0, step=0.5)
-
+    st.header("4. AD operating conditions")
+    adm1_mode = st.radio("Mode", ["continuous", "batch"], horizontal=True)
     if adm1_mode == "continuous":
-        adm1_HRT_days = st.number_input("HRT (days)", value=30, min_value=5, max_value=90)
-        t_spinup = st.number_input("Spin-up duration (days)", value=400, min_value=100)
-        adm1_t_sim = None
+        adm1_HRT_days = st.number_input("Hydraulic retention time (d)", 5, 90, 30)
+        ISR_batch, batch_days = 2.0, None
     else:
         adm1_HRT_days = None
-        t_spinup = 400
-        adm1_t_sim = None
+        ISR_batch = st.number_input("Inoculum to substrate ratio (VS basis)", 0.5, 10.0, 2.0, step=0.5)
+        batch_days = st.number_input("Duration (d)", 5, 120, 30)
+    if PATHWAY == "A":
+        COD_conc_target = st.number_input("COD target of the diluted process water (kg COD/m³)", 1.0, 50.0, 10.0, step=1.0)
+        TS_pct = 8.0
+        dig_type = st.session_state.get("dig_type", "Food waste / OFMSW")
+    else:
+        TS_pct = st.number_input("Total solids target of the digester feed (%)", 2.0, 15.0, 8.0, step=0.5)
+        COD_conc_target = 10.0
+        dig_type = st.selectbox("Digestate coefficients", list(DIGESTATE_TYPES), key="dig_type",
+                                help="Measured digestate H/C, O/C and fixed carbon (SI, digestate characterization).")
 
-    st.divider()
-    run_button = st.button("▶ Run Simulation", type="primary", use_container_width=True)
-    st.caption("⏱ Continuous mode with spin-up takes ~30–60 s")
-
-# ============================================================
-# PARAMETER SUMMARY
-# ============================================================
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Pathway", f"{'A: HTC→AD' if PATHWAY == 'A' else 'B: AD→HTC'}")
-col2.metric("Feedstock", f"{m_feedstock:.0f} kg")
-col3.metric("HTC Temp", f"{T_HTC} °C")
-col4.metric("AD Mode", adm1_mode.capitalize())
-st.divider()
-
-# ============================================================
-# VALIDATION
-# ============================================================
-errors = []
-elem_sum = C_feed + H_feed + N_feed + O_feed + S_feed + Ash_feed
-if abs(elem_sum - 100.0) > 0.5:
-    errors.append(f"Ultimate analysis sums to {elem_sum:.1f}% — must be 100%")
-if not (0.0 < target_moisture_HTC < 1.0):
-    errors.append("HTC moisture target must be between 0 and 1")
-if not (0.0 < TS_target < 1.0):
-    errors.append("TS target must be between 0 and 1")
-if adm1_mode == "continuous" and (adm1_HRT_days is None or adm1_HRT_days <= 0):
-    errors.append("HRT must be > 0 in continuous mode")
-if errors:
-    for e in errors:
-        st.error(f"❌ {e}")
-    st.stop()
-
-# ============================================================
-# SIMULATION — only when button clicked
-# ============================================================
-if run_button:
-    release_bw_locks()
-
-    default_params = {
-        "WC": WC_feed, "C_feed": C_feed, "H_feed": H_feed,
-        "N_feed": N_feed, "O_feed": O_feed, "S_feed": S_feed,
-        "Ash_feed": Ash_feed, "VM_feed": V_feed, "FC_feed": Fc_feed,
-    }
-    ml_params = {**default_params, "T": T_HTC, "RT": RT_HTC}
-
-    progress = st.progress(0, text="Initialising Brightway…")
+    st.header("5. LCA settings")
+    sel_country = st.selectbox("Country", list(LOCATION_HIERARCHY), index=list(LOCATION_HIERARCHY).index("Canada"))
+    sel_province = st.selectbox("Province / state / region", list(LOCATION_HIERARCHY[sel_country]),
+                                index=(list(LOCATION_HIERARCHY[sel_country]).index("Quebec")
+                                       if sel_country == "Canada" else 0))
+    loc_code, loc_prio = location_priority(sel_country, sel_province)
+    st.caption(f"Dataset location priority: {' → '.join(loc_prio)}")
+    if loc_code != "CA-QC":
+        st.info("The industrial heat mix displaced by hydrochar uses Quebec fuel shares; "
+                "its datasets follow the location priority above.")
 
     try:
         import bw2data as bd
-        import bw2calc as bc
+        if "ei_projects" not in st.session_state:
+            st.session_state["ei_projects"] = ecoinvent_projects(bd)
+        ei_projects = st.session_state["ei_projects"]
+    except Exception as e:
+        bd, ei_projects = None, {}
+        st.error(f"Brightway not available: {e}")
+    projects = list(ei_projects)
+    BW_PROJECT = st.selectbox("Brightway project", projects,
+                              help="Projects of this computer that contain an ecoinvent database.") if projects else None
+    if st.button("Refresh project list", help="After creating a project with setup_hades.py"):
+        st.session_state.pop("ei_projects", None)
+        st.rerun()
+    dbs, methods_all = ei_projects.get(BW_PROJECT, []), []
+    if BW_PROJECT:
+        bd.projects.set_current(BW_PROJECT)
+        methods_all = sorted(bd.methods)
+    EI_NAME = st.selectbox("Background database (ecoinvent version and system model)", dbs,
+                           index=dbs.index(DEFAULT_EI) if DEFAULT_EI in dbs else 0) if dbs else None
+    default_m = [m for m in DEFAULT_METHODS if m in methods_all]
+    if BW_PROJECT and len(default_m) < len(DEFAULT_METHODS):
+        st.warning("The IMPACT World+ 2.2.1 indicators of the article are not in this project. "
+                   "Import them with `python setup_hades.py --iw <file>` or choose other indicators.")
+    METHODS = st.multiselect("LCIA method (indicators)", methods_all, default=default_m, format_func=method_label)
+    hc_credit = st.radio("Heat displaced by hydrochar", ["Industrial heat mix", "Hard coal heat"],
+                         help="Article: industrial heat mix; hard coal heat is the alternative of SI Section S6.2.")
 
-        bd.projects.set_current("HTC parametrization")
-        ei = bd.Database("ecoinvent-3.10.1-cutoff")
-        bios = bd.Database("ecoinvent-3.10.1-biosphere")
+    with st.expander("Advanced: model defaults"):
+        MC_char = st.number_input("Hydrochar moisture after the filter press (kg/kg)", 0.30, 0.50,
+                                  float(hi.MC_CHAR_CENTRAL), step=0.01)
+        target_MC_char_dry = st.number_input("Hydrochar moisture after drying (kg/kg)", 0.0, 0.30, 0.10, step=0.01)
+        eps_HR = st.number_input("HTC feed preheat effectiveness", 0.0, 0.9, float(hi.EPS_HR_CENTRAL), step=0.05)
+        nox_conv = st.number_input("Fuel N converted to NOx in the boiler", 0.01, 0.25, float(hce.NOX_CONV_CENTRAL), step=0.01)
+        t_spinup = st.number_input("AD spin-up duration (d)", 100, 1000, 400, step=50)
 
-        progress.progress(10, text="Brightway connected — resolving providers…")
+    run_button = st.button("▶ Run", type="primary", use_container_width=True)
 
-        with st.spinner(f"Resolving providers for {sel_province}, {sel_country}…"):
-            providers, loc_code, resolution_log = resolve_all_providers(ei, sel_country, sel_province)
+# ============================================================
+# INPUT CHECKS
+# ============================================================
+errors, warns = [], []
+if O_feed < 0:
+    errors.append(f"C + H + N + S + ash = {100 - O_feed:.2f} % > 100 %")
+if abs(VM_feed + FC_feed + Ash_feed - 100.0) > 1.0:
+    warns.append(f"VM + FC + ash = {VM_feed + FC_feed + Ash_feed:.1f} % (expected 100 %)")
+if moist_pct / 100.0 < WC_feed / 100.0 - 1e-9:
+    warns.append("The feedstock is wetter than the reactor moisture target: no water is added before HTC.")
+if not BW_PROJECT or not EI_NAME:
+    errors.append(SETUP_HELP)
+if not METHODS:
+    errors.append("Select at least one LCIA indicator.")
+for w in warns:
+    st.warning(w)
+if errors:
+    for e in errors:
+        st.error(e)
+    st.stop()
 
-        elec = providers["electricity_htc"]
-        ad_elec = providers["electricity_ad"]
-        ad_heat = providers["heat_ng_ad"]
-        coal_heat = providers["heat_coal"]
-        drying_heat = providers["heat_ng_drying"]
-        ng_heat_market = providers["heat_ng_market"]
-        tap_water = providers["tap_water"]
-        wastewater_treat = providers["wastewater"]
-
-        psa_ref = ei.search("biogas purification to biomethane by pressure swing adsorption")[0]
-        biomethane_heat_ref = ei.search("heat production, biomethane, at boiler condensing modulating <100kW")[0]
-
-        co2_air = [a for a in bios if "Carbon dioxide, non-fossil" in a["name"] and "air" in a["categories"]][0]
-        co_air = [a for a in bios if "Carbon monoxide, non-fossil" in a["name"] and "air" in a["categories"]][0]
-
-        proxies = [r for r in resolution_log if "proxy" in r["Status"]]
-        if proxies:
-            st.warning(f"⚠️ {len(proxies)} process(es) used a proxy location for "
-                       f"**{sel_province}** (code: `{loc_code}`). See details below.")
-        else:
-            st.success(f"✅ All providers resolved exactly for `{loc_code}`.")
-
-        with st.expander("🔌 Resolved background providers", expanded=bool(proxies)):
-            st.dataframe(pd.DataFrame(resolution_log), use_container_width=True, hide_index=True)
-
-        progress.progress(15, text=f"Providers resolved ({loc_code}) — setting up foreground DB…")
-
-        FOREGROUND_DB = f"Pathway{PATHWAY}"
-        if FOREGROUND_DB not in bd.databases:
-            bd.Database(FOREGROUND_DB).register()
-        db = bd.Database(FOREGROUND_DB)
-
-        htc_reactor      = get_or_create(db, "htc_reactor",         "HTC reactor",                                           "unit")
-        drying           = get_or_create(db, "hydrochar_drying",     "Hydrochar drying",                                      "unit")
-        heat_prod        = get_or_create(db, "heat_prod_hydrochar",  "Heat production from hydrochar",                        "megajoule")
-        sub_heat_coal    = get_or_create(db, "substitute_heat_coal", "Substitution of heat from hard coal",                   "megajoule", location="QC-CA")
-        ad_process       = get_or_create(db, "anaerobic_digestion",
-                                         "Anaerobic digestion of HTC process water (ADM1)" if PATHWAY == "A"
-                                         else "Anaerobic digestion of raw feedstock (ADM1)", "unit")
-        dewatering       = get_or_create(db, "digestate dewatering", "dewatering_B",                                          "unit")
-        biogas_upgrading = get_or_create(db, "biogas_upgrading",     "Biogas upgrading (PSA)",                                "unit")
-        heat_biomethane  = get_or_create(db, "heat_biomethane",      "Heat production from biomethane",                       "megajoule")
-        heat_naturalgas  = get_or_create(db, "heat_naturalgas",      "Substitution of heat from Natural Gas",                 "megajoule")
-        waste_treatment  = get_or_create(db, "waste_treatment_1kg",  "Waste treatment of organic waste (HTC system)",         "kilogram")
-
-        progress.progress(30, text="Foreground activities ready — building context…")
-
-        # ── Build the SAME SystemContext the notebook uses ─────────────────
+# ============================================================
+# RUN
+# ============================================================
+if run_button:
+    release_bw_locks()
+    feed = dict(WC=WC_feed, C_feed=C_feed, H_feed=H_feed, N_feed=N_feed, O_feed=O_feed,
+                S_feed=S_feed, Ash_feed=Ash_feed, VM_feed=VM_feed, FC_feed=FC_feed)
+    progress = st.progress(0, text="Connecting to Brightway…")
+    try:
+        from bw2calc import LCA
+        lcc = _load_module("lca_contributions", os.path.join(_APP_DIR, "ADM1", "lca_contributions.py"))
+        lcc.clear_cache()
+        bd.projects.set_current(BW_PROJECT)
+        bwl.GENERIC_FLOW_DB = biosphere_of(bd, EI_NAME)
+        ei, bios = bd.Database(EI_NAME), bd.Database(bwl.GENERIC_FLOW_DB)
+        progress.progress(10, text="Resolving background datasets…")
+        bg, heat_mix, ash = resolve_background(ei, loc_prio)
+        log = pd.DataFrame([{"Role": k, "Dataset": a["name"], "Location": a.get("location", "?"),
+                             "Exact": "yes" if a.get("location") == loc_code else "fallback"}
+                            for k, a in bg.items() if k not in ("ad_elec", "drying_heat")])
+        co2_air = bwl.get_flow("Carbon dioxide, non-fossil", ("air",), bwl.CORE_FLOW_LOCATIONS)
+        co_air = bwl.get_flow("Carbon monoxide, non-fossil", ("air",), bwl.CORE_FLOW_LOCATIONS)
+        FG, fg = foreground(bd, PATHWAY)
         ctx = sb.SystemContext(
-            ei=ei, bios=bios, FOREGROUND_DB=FOREGROUND_DB,
-            elec=elec, ad_elec=ad_elec, ad_heat=ad_heat, drying_heat=drying_heat,
-            coal_heat=coal_heat, ng_heat_market=ng_heat_market,
-            biomethane_heat_ref=biomethane_heat_ref, tap_water=tap_water,
-            wastewater_treat=wastewater_treat, psa_ref=psa_ref,
-            co2_air=co2_air, co_air=co_air,
-            htc_reactor=htc_reactor, drying=drying, heat_prod=heat_prod,
-            sub_heat_coal=sub_heat_coal, ad_process=ad_process, dewatering=dewatering,
-            biogas_upgrading=biogas_upgrading, heat_biomethane=heat_biomethane,
-            heat_naturalgas=heat_naturalgas, waste_treatment=waste_treatment,
-            PATHWAY=PATHWAY, m_feedstock=m_feedstock,
-            default_params=default_params, ml_params=ml_params,
-            T_HTC=T_HTC, RT_HTC=RT_HTC, target_moisture_HTC=target_moisture_HTC,
+            ei=ei, bios=bios, FOREGROUND_DB=FG, **bg, co2_air=co2_air, co_air=co_air, **fg,
+            PATHWAY=PATHWAY, m_feedstock=1000.0, default_params=feed,
+            ml_params={**feed, "T": T_HTC, "RT": RT_HTC},
+            T_HTC=T_HTC, RT_HTC=RT_HTC, target_moisture_HTC=moist_pct / 100.0,
             MC_char=MC_char, target_MC_char_dry=target_MC_char_dry,
             COD_conc_target=COD_conc_target, ISR_batch=ISR_batch,
+            feedstock_name=DIGESTATE_TYPES[dig_type], eps_HR=eps_HR, nox_conv=nox_conv,
+            heat_mix_components_qc=heat_mix, ash_disposal=ash,
             location_country=sel_country, location_province=sel_province, location_code=loc_code,
-        )
-
-        progress.progress(45, text="Context ready — running simulation…")
-
+            location_priority=loc_prio)
+        ss = None
         if adm1_mode == "continuous":
-            ss_adapted = spinup_ss_state(
-                ctx, pathway=PATHWAY, adm1_HRT_days=adm1_HRT_days,
-                t_spinup=t_spinup, verbose=False, ml_module=ML_MODULE_PATH,
-            )
-        else:
-            ss_adapted = None
-
-        progress.progress(60, text="Building LCA system…")
-
-        wt, ss_state, adm1_out, feed_inputs, inv = build_system(
-            ctx,
-            ml_module=ML_MODULE_PATH,
-            adm1_mode=adm1_mode,
-            adm1_HRT_days=adm1_HRT_days,
-            adm1_t_sim_days=adm1_t_sim,
-            adm1_ss_state=ss_adapted,
-            ISR_batch=ISR_batch,
-        )
-
-        progress.progress(90, text="Running LCA…")
-
-        method = ("IMPACT World+ v2.0.1, footprint version", "climate change", "carbon footprint")
-        lca = bc.LCA({wt: 1}, method)
-        lca.lci()
-        lca.lcia()
-        gwp_score = lca.score
-
-        progress.progress(100, text="Done!")
-        st.session_state["wt"] = wt
-        st.session_state["gwp"] = gwp_score
-        st.session_state["pathway"] = PATHWAY
-        st.session_state["T_HTC"] = T_HTC
-        st.session_state["RT_HTC"] = RT_HTC
-
+            progress.progress(30, text="AD spin-up to steady state…")
+            ss = sb.spinup_ss_state(ctx, pathway=PATHWAY, adm1_HRT_days=adm1_HRT_days, t_spinup=t_spinup,
+                                    TS_target=TS_pct / 100.0, verbose=False, ml_module=ML_MODULE_PATH)
+        progress.progress(55, text="Building the system…")
+        wt, _, adm1_out, _, inv = sb.build_system(
+            ctx, ml_module=ML_MODULE_PATH, adm1_mode=adm1_mode, adm1_HRT_days=adm1_HRT_days,
+            adm1_t_sim_days=batch_days, adm1_ss_state=ss, ISR_batch=ISR_batch, TS_target=TS_pct / 100.0)
+        progress.progress(80, text="Life cycle impact assessment…")
+        MJ_hc = float(wt.get("MJ_hydrochar") or 0.0)
+        scores, contrib = {}, {}
+        for m in METHODS:
+            lca = LCA({wt: 1}, m); lca.lci(); lca.lcia()
+            s_mix = lca.score
+            c = lcc.contributions(wt, FG, m, total=s_mix)
+            if hc_credit == "Hard coal heat":
+                # same credit with coal heat instead of the heat mix (SI Section S6.2)
+                d = MJ_hc * (lcc.unit_score(fg["qc_heat_mix"], m) - lcc.unit_score(bg["coal_heat"], m))
+                c["Credit: industrial heat mix"] += d
+                c = {("Credit: hard coal heat" if k == "Credit: industrial heat mix" else k): v for k, v in c.items()}
+                s_mix += d
+            scores[m], contrib[m] = s_mix, c
+        units = {m: bd.methods[m].get("unit", "") for m in METHODS}
+        progress.progress(100, text="Done")
+        flags = [f for f in str(wt.get("qa_flags") or "").split("; ") if f]
+        st.session_state["res"] = dict(wt={k: v for k, v in wt._data.items()}, scores=scores, contrib=contrib, units=units,
+                                       flags=flags, log=log, pathway=PATHWAY, credit=hc_credit, loc=loc_code)
     except Exception as e:
         progress.empty()
-        st.error(f"❌ Simulation failed: {e}")
+        st.error(f"Run failed: {e}")
         st.exception(e)
         st.stop()
 
 # ============================================================
-# RESULTS  (unchanged from your original app — reads from wt / gwp)
+# RESULTS
 # ============================================================
-if "wt" in st.session_state:
-    wt = st.session_state["wt"]
-    gwp = st.session_state["gwp"]
+if "res" in st.session_state:
+    R = st.session_state["res"]
+    wt = R["wt"]
+    st.subheader(f"Results: Pathway {R['pathway']} ({R['loc']}; hydrochar displaces {R['credit'].lower()})")
+    if R["flags"]:
+        with st.container(border=True):
+            st.markdown("**Applicability and plausibility flags**")
+            for f in R["flags"]:
+                st.warning(f)
+    else:
+        st.success("All inputs within the training domain of the HTC surrogate; all plausibility checks passed.")
 
-    st.subheader(f"📊 Results — Pathway {st.session_state['pathway']}")
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("GWP (kg CO₂-eq / FU)", f"{gwp:.2f}")
-    k2.metric("Hydrochar (kg wet)", f"{wt.get('HC_wet_yield', 0):.1f}")
-    k3.metric("Biogas (m³)", f"{wt.get('biogas_m3', 0):.3f}")
-    k4.metric("Biomethane (m³)", f"{wt.get('biomethane_m3', 0):.3f}")
-    k5.metric("Process water (kg)", f"{wt.get('PW_yield', 0):.1f}")
+    cols = st.columns(len(R["scores"]))
+    for col, (m, s) in zip(cols, R["scores"].items()):
+        col.metric(f"{m[-1]} ({R['units'].get(m) or 'unit n/a'} per t)", f"{s:.4g}", help=method_label(m))
 
-    tab_mb, tab_lca = st.tabs(["📦 Mass Balance", "🌍 LCA"])
-
-    with tab_mb:
-        st.subheader("Mass Balance Summary")
-        keys_to_show = [
-            ("m_feedstock", "Feedstock in (kg)"),
-            ("added_water_HTC", "Dilution water added (kg)"),
-            ("HC_wet_yield", "Hydrochar — wet (kg)"),
-            ("HC_dry_yield", "Hydrochar — dried (kg)"),
-            ("PW_yield", "Process water (kg)"),
-            ("CO2_yield_HTC", "HTC CO₂ off-gas (kg)"),
-            ("CO_yield_HTC", "HTC CO off-gas (kg)"),
-            ("CH4_mass_AD", "AD CH₄ produced (kg)"),
-            ("CO2_mass_AD", "AD CO₂ produced (kg)"),
-            ("NH3_mass_AD", "AD NH₃ produced (kg)"),
-            ("biogas_m3", "Biogas (m³)"),
-            ("biomethane_m3", "Biomethane (m³)"),
-            ("wastewater_drying_m3", "Drying wastewater (m³)"),
-            ("dilution_water_PW_m3", "AD dilution water (m³)"),
-        ]
-        if st.session_state["pathway"] == "B":
-            keys_to_show += [
-                ("m_cake_dewater_kg", "Dewatered cake to HTC (kg)"),
-                ("m_centrate_dewater_kg", "Centrate to WWT (kg)"),
-                ("E_centrifuge_kWh", "Centrifuge electricity (kWh)"),
-                ("dilution_water_AD_kg", "AD dilution water (kg)"),
-            ]
-        mb_rows = []
-        for key, label in keys_to_show:
-            val = wt.get(key)
-            if val is not None:
-                mb_rows.append({"Stream / Variable": label, "Value": f"{float(val):.4f}"})
-        st.dataframe(pd.DataFrame(mb_rows), use_container_width=True, hide_index=True)
-
-        st.subheader("Mass Balance Check")
-        mb_checks = {}
-        if st.session_state["pathway"] == "A":
-            mb_checks["HTC (A)"] = wt.get("MB_HTC_A", "—")
-            mb_checks["AD (A)"] = wt.get("MB_AD_A", "—")
-        else:
-            mb_checks["AD (B)"] = wt.get("MB_AD_B", "—")
-            mb_checks["DW (B)"] = wt.get("MB_DW_B", "—")
-            mb_checks["HTC (B)"] = wt.get("MB_HTC_B", "—")
-        for name, val in mb_checks.items():
-            if val == "—":
-                st.write(f"**{name}**: —")
-            elif abs(float(val)) < 0.01:
-                st.success(f"✅ {name} residual: {float(val):.6f} kg")
-            else:
-                st.warning(f"⚠️ {name} residual: {float(val):.6f} kg")
-
+    tab_lca, tab_proc, tab_bg = st.tabs(["Impacts by contribution", "Process outputs", "Background datasets"])
     with tab_lca:
-        st.subheader("Life Cycle Assessment")
-        st.metric("GWP100 (kg CO₂-eq per functional unit)", f"{gwp:.4f}")
-
-        st.divider()
-        st.subheader("Contribution Analysis")
-
-        method = ("IMPACT World+ v2.0.1, footprint version", "climate change", "carbon footprint")
-
-        import bw2calc as bc
-
-        results = []
-        for exc in wt.exchanges():
-            if exc["type"] != "technosphere":
-                continue
-            act = exc.input
-            try:
-                lca_temp = bc.LCA({act: exc["amount"]}, method=method)
-                lca_temp.lci()
-                lca_temp.lcia()
-                results.append((act["name"], lca_temp.score))
-            except Exception:
-                pass
-
-        if results:
-            df_contrib = pd.DataFrame(results, columns=["Activity", "Impact"])
-            df_contrib = df_contrib.sort_values("Impact", ascending=True, key=abs)
-
-            pos = df_contrib[df_contrib["Impact"] > 0]
-            neg = df_contrib[df_contrib["Impact"] < 0]
-
-            fig_lca, ax_lca = plt.subplots(figsize=(10, 6))
-            colors = plt.cm.tab20(np.linspace(0, 1, len(df_contrib)))
-            color_map = dict(zip(df_contrib["Activity"], colors))
-
-            bottom_pos = bottom_neg = 0
-            for _, row in pos.iterrows():
-                ax_lca.bar(0, row["Impact"], bottom=bottom_pos, color=color_map[row["Activity"]],
-                           edgecolor="black", linewidth=0.8, width=0.5, label=row["Activity"])
-                bottom_pos += row["Impact"]
-            for _, row in neg.iterrows():
-                ax_lca.bar(0, row["Impact"], bottom=bottom_neg, color=color_map[row["Activity"]],
-                           edgecolor="black", linewidth=0.8, width=0.5, label=row["Activity"])
-                bottom_neg += row["Impact"]
-
-            ax_lca.scatter(0, gwp, color="black", s=90, zorder=5, marker="o")
-            ax_lca.annotate(f"Net: {gwp:.3e}", xy=(0, gwp), xytext=(0.3, gwp),
-                            fontsize=9, va="center",
-                            arrowprops=dict(arrowstyle="-", color="black", lw=0.8))
-            ax_lca.axhline(0, color="black", linewidth=1.2)
-            ax_lca.set_ylabel("Impact (kg CO₂-eq)")
-            ax_lca.set_title(f"First-Tier Contributions — Pathway {st.session_state['pathway']}")
-            ax_lca.set_xticks([])
-            ax_lca.grid(axis="y", linestyle="--", alpha=0.3)
-            ax_lca.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8)
-            plt.tight_layout()
-            st.pyplot(fig_lca)
-
+        for m, c in R["contrib"].items():
+            df = pd.Series(c).loc[lambda x: x.abs() > 0]
+            fig, ax = plt.subplots(figsize=(8, 0.45 * len(df) + 1.2))
+            ax.barh(df.index, df.values, color=["#c0392b" if v < 0 else "#2f6fd6" for v in df.values])
+            ax.axvline(0, color="0.2", lw=0.8)
+            ax.set_title(f"{method_label(m)}   (net {R['scores'][m]:.4g} {R['units'].get(m, '')})", fontsize=10)
+            ax.invert_yaxis(); ax.grid(axis="x", color="0.92"); ax.set_axisbelow(True)
+            st.pyplot(fig)
+            plt.close(fig)
+    with tab_proc:
+        rows = [("Dried hydrochar (kg)", "HC_dry_yield"), ("Hydrochar heat delivered (MJ)", "MJ_hydrochar"),
+                ("Process water (kg)", "PW_yield"), ("Biogas (m³)", "biogas_m3"),
+                ("Biomethane (m³)", "biomethane_m3"), ("CH4 from AD (kg)", "CH4_mass_AD"),
+                ("HTC electricity (kWh)", "E_HTC_elec_kWh"), ("Dryer electricity (kWh)", "E_dryer_heat_kWh"),
+                ("Digester heat, natural gas (MJ)", "Q_AD_util_MJ"), ("Tap water added before HTC (kg)", "added_water_HTC"),
+                ("Dilution water before AD, Pathway A (m³)", "dilution_water_PW_m3"),
+                ("Dilution water before AD, Pathway B (kg)", "dilution_water_AD_kg")]
+        st.dataframe(pd.DataFrame([{"Output (per t wet feed)": l, "Value": round(float(wt[k]), 3)}
+                                   for l, k in rows if wt.get(k) is not None]),
+                     use_container_width=True, hide_index=True)
+    with tab_bg:
+        st.dataframe(R["log"], use_container_width=True, hide_index=True)
 else:
-    st.info("👈 Set your parameters in the sidebar and click **▶ Run Simulation** to begin.")
+    st.info("Set the inputs in the sidebar and click **Run**. Continuous mode takes about 1 min (AD spin-up).")

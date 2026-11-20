@@ -1,0 +1,193 @@
+scenario,pathway,indicator,category,value
+S1 Base FW,A,GWP100 (kg CO2 eq),HTC and drying (electricity),4.118254886679386
+S1 Base FW,A,GWP100 (kg CO2 eq),Digester heat (natural gas),4.442052683271226
+S1 Base FW,A,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.9566029740542796
+S1 Base FW,A,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",2.6755215554784266
+S1 Base FW,A,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,1.0472661930995746
+S1 Base FW,A,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",0.5564691372607491
+S1 Base FW,A,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-77.91649100308199
+S1 Base FW,A,GWP100 (kg CO2 eq),Credit: natural gas heat,-17.40325914555337
+S1 Base FW,A,Human health (DALY),HTC and drying (electricity),0.000141100486844092
+S1 Base FW,A,Human health (DALY),Digester heat (natural gas),3.0942558349693496e-05
+S1 Base FW,A,Human health (DALY),Dilution water and wastewater treatment,-1.5094906367713862e-05
+S1 Base FW,A,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",7.1475837607822675e-06
+S1 Base FW,A,Human health (DALY),Hydrochar combustion and ash disposal,0.00013230018921628678
+S1 Base FW,A,Human health (DALY),"Other (AD and dewatering electricity, PSA)",1.753005620686676e-05
+S1 Base FW,A,Human health (DALY),Credit: Quebec industrial heat mix,-0.0005834066958840355
+S1 Base FW,A,Human health (DALY),Credit: natural gas heat,-0.00012147645930420508
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),22.512513451533234
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),17.875200577551706
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,12.539143285596642
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",3.551033598603185
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,123.90464276295066
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",2.995509880513523
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-359.6840112951218
+S1 Base FW,A,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-70.08347523436602
+S1 Base FW,B,GWP100 (kg CO2 eq),HTC and drying (electricity),1.3057772554697593
+S1 Base FW,B,GWP100 (kg CO2 eq),Digester heat (natural gas),12.699077941373314
+S1 Base FW,B,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.6409590124002451
+S1 Base FW,B,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",14.4589139805181
+S1 Base FW,B,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,0.6323540476010415
+S1 Base FW,B,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",1.0563314657005038
+S1 Base FW,B,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-27.585372209996088
+S1 Base FW,B,GWP100 (kg CO2 eq),Credit: natural gas heat,-94.04978496658951
+S1 Base FW,B,Human health (DALY),HTC and drying (electricity),4.473880600559079e-05
+S1 Base FW,B,Human health (DALY),Digester heat (natural gas),8.845954521612701e-05
+S1 Base FW,B,Human health (DALY),Dilution water and wastewater treatment,-3.955152494234785e-05
+S1 Base FW,B,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",3.4864163928025956e-05
+S1 Base FW,B,Human health (DALY),Hydrochar combustion and ash disposal,0.00014018050782810054
+S1 Base FW,B,Human health (DALY),"Other (AD and dewatering electricity, PSA)",2.789253935586168e-05
+S1 Base FW,B,Human health (DALY),Credit: Quebec industrial heat mix,-0.00020654794188727684
+S1 Base FW,B,Human health (DALY),Credit: natural gas heat,-0.0006564767426900183
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),7.13805454916168
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),51.10217765018573
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,9.564614020710065
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",18.634019650760326
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,230.68224397521803
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",5.523493989098496
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-127.34168597464054
+S1 Base FW,B,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-378.7414598826765
+S2 OFMSW,A,GWP100 (kg CO2 eq),HTC and drying (electricity),8.202232422929695
+S2 OFMSW,A,GWP100 (kg CO2 eq),Digester heat (natural gas),26.447178772663612
+S2 OFMSW,A,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,2.982085117684102
+S2 OFMSW,A,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",7.431320190549888
+S2 OFMSW,A,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,2.237039321648751
+S2 OFMSW,A,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",1.548947652134428
+S2 OFMSW,A,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-180.64146944679248
+S2 OFMSW,A,GWP100 (kg CO2 eq),Credit: natural gas heat,-48.337936506213865
+S2 OFMSW,A,Human health (DALY),HTC and drying (electricity),0.00028102655613357553
+S2 OFMSW,A,Human health (DALY),Digester heat (natural gas),0.00018422639952916383
+S2 OFMSW,A,Human health (DALY),Dilution water and wastewater treatment,2.4013377689953777e-05
+S2 OFMSW,A,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",1.845379673994778e-05
+S2 OFMSW,A,Human health (DALY),Hydrochar combustion and ash disposal,0.00024314599757450982
+S2 OFMSW,A,Human health (DALY),"Other (AD and dewatering electricity, PSA)",4.8804633996323426e-05
+S2 OFMSW,A,Human health (DALY),Credit: Quebec industrial heat mix,-0.001352569160557058
+S2 OFMSW,A,Human health (DALY),Credit: natural gas heat,-0.00033740354767668017
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),44.83764915840246
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),106.42571328613494
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,36.28152124869352
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",9.656259849377387
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,152.12686921997937
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",8.338365776188057
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-833.8908426240276
+S2 OFMSW,A,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-194.65839976756135
+S2 OFMSW,B,GWP100 (kg CO2 eq),HTC and drying (electricity),2.4161337342097027
+S2 OFMSW,B,GWP100 (kg CO2 eq),Digester heat (natural gas),25.70545438120653
+S2 OFMSW,B,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,1.6556822033862217
+S2 OFMSW,B,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",36.90603365817403
+S2 OFMSW,B,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,1.0264998568968924
+S2 OFMSW,B,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",2.5003654510537094
+S2 OFMSW,B,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-56.538083632599616
+S2 OFMSW,B,GWP100 (kg CO2 eq),Credit: natural gas heat,-240.05983673447423
+S2 OFMSW,B,Human health (DALY),HTC and drying (electricity),8.278206559776835e-05
+S2 OFMSW,B,Human health (DALY),Digester heat (natural gas),0.00017905967776818952
+S2 OFMSW,B,Human health (DALY),Dilution water and wastewater treatment,-6.764743768244821e-05
+S2 OFMSW,B,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",8.838460408412667e-05
+S2 OFMSW,B,Human health (DALY),Hydrochar combustion and ash disposal,0.00019179468712644267
+S2 OFMSW,B,Human health (DALY),"Other (AD and dewatering electricity, PSA)",6.448323234878397e-05
+S2 OFMSW,B,Human health (DALY),Credit: Quebec industrial heat mix,-0.000423333958435134
+S2 OFMSW,B,Human health (DALY),Credit: natural gas heat,-0.0016756412545348108
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),13.207837952924107
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),103.44095078647138
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,23.342972631302395
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",47.47338895197848
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,280.3672592298317
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",13.027720861748723
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-260.9953868572972
+S2 OFMSW,B,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-966.7285582450892
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),HTC and drying (electricity),4.960517202022149
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),Digester heat (natural gas),0.0
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.5776522850797287
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",1.587253552393871
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,1.185153740998163
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",0.3624801909548308
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-90.20110606140237
+S3 HTC 250 C,A,GWP100 (kg CO2 eq),Credit: natural gas heat,-10.324486022341612
+S3 HTC 250 C,A,Human health (DALY),HTC and drying (electricity),0.00016995824966243992
+S3 HTC 250 C,A,Human health (DALY),Digester heat (natural gas),0.0
+S3 HTC 250 C,A,Human health (DALY),Dilution water and wastewater treatment,-2.18893525351983e-05
+S3 HTC 250 C,A,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",4.351543504928939e-06
+S3 HTC 250 C,A,Human health (DALY),Hydrochar combustion and ash disposal,0.00013669095513884434
+S3 HTC 250 C,A,Human health (DALY),"Other (AD and dewatering electricity, PSA)",1.1508254940803174e-05
+S3 HTC 250 C,A,Human health (DALY),Credit: Quebec industrial heat mix,-0.0006753888499712679
+S3 HTC 250 C,A,Human health (DALY),Credit: natural gas heat,-7.206592717147842e-05
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),27.116755351471195
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),0.0
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,8.076506959893477
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",2.1230982334240776
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,123.23081778127882
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",1.9539547299552842
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-416.39318241549927
+S3 HTC 250 C,A,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-41.577031888260656
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),HTC and drying (electricity),1.5603442734622732
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),Digester heat (natural gas),9.782526352094324
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.6431176208191933
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",14.4589139805181
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,0.5603191322214385
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",1.0563314657005038
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-22.930167747044646
+S3 HTC 250 C,B,GWP100 (kg CO2 eq),Credit: natural gas heat,-94.04978496658951
+S3 HTC 250 C,B,Human health (DALY),HTC and drying (electricity),5.346083297127841e-05
+S3 HTC 250 C,B,Human health (DALY),Digester heat (natural gas),6.814335939712011e-05
+S3 HTC 250 C,B,Human health (DALY),Dilution water and wastewater treatment,-3.989242388518844e-05
+S3 HTC 250 C,B,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",3.4864163928025956e-05
+S3 HTC 250 C,B,Human health (DALY),Hydrochar combustion and ash disposal,0.00012735948047919594
+S3 HTC 250 C,B,Human health (DALY),"Other (AD and dewatering electricity, PSA)",2.789253935586168e-05
+S3 HTC 250 C,B,Human health (DALY),Credit: Quebec industrial heat mix,-0.00017169168207075493
+S3 HTC 250 C,B,Human health (DALY),Credit: natural gas heat,-0.0006564767426900183
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),8.529649672477158
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),39.365724174639254
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,9.605030679603582
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",18.634019650760326
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,216.34587556175802
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",5.523493989098496
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-105.8519783007272
+S3 HTC 250 C,B,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-378.7414598826765
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),HTC and drying (electricity),4.118254886679386
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),Digester heat (natural gas),4.442052683271226
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.9564541609846253
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",2.7936359567568307
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,1.0472661930995746
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",0.5609657264850307
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-77.91649100308199
+S4 HRT 50 d,A,GWP100 (kg CO2 eq),Credit: natural gas heat,-18.171548801101434
+S4 HRT 50 d,A,Human health (DALY),HTC and drying (electricity),0.000141100486844092
+S4 HRT 50 d,A,Human health (DALY),Digester heat (natural gas),3.0942558349693496e-05
+S4 HRT 50 d,A,Human health (DALY),Dilution water and wastewater treatment,-1.5071405014860454e-05
+S4 HRT 50 d,A,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",7.440495315872978e-06
+S4 HRT 50 d,A,Human health (DALY),Hydrochar combustion and ash disposal,0.00013230018921628678
+S4 HRT 50 d,A,Human health (DALY),"Other (AD and dewatering electricity, PSA)",1.7616319245849722e-05
+S4 HRT 50 d,A,Human health (DALY),Credit: Quebec industrial heat mix,-0.0005834066958840355
+S4 HRT 50 d,A,Human health (DALY),Credit: natural gas heat,-0.0001268391966107901
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),22.512513451533234
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),17.875200577551706
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,12.536356987247057
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",3.7044530032420933
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,123.90464276295066
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",3.018040475308477
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-359.6840112951218
+S4 HRT 50 d,A,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-73.17740198665366
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),HTC and drying (electricity),1.2720821781746472
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),Digester heat (natural gas),12.768786686215487
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),Dilution water and wastewater treatment,0.6386763180908328
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),"Direct emissions (HTC off-gas, digestion, upgrading)",14.697483099015992
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),Hydrochar combustion and ash disposal,0.6050263521389583
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),"Other (AD and dewatering electricity, PSA)",1.0638979663101675
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),Credit: Quebec industrial heat mix,-26.791221564101036
+S4 HRT 50 d,B,GWP100 (kg CO2 eq),Credit: natural gas heat,-95.6015871506697
+S4 HRT 50 d,B,Human health (DALY),HTC and drying (electricity),4.358433841156988e-05
+S4 HRT 50 d,B,Human health (DALY),Digester heat (natural gas),8.894512408215127e-05
+S4 HRT 50 d,B,Human health (DALY),Dilution water and wastewater treatment,-3.9191029694540946e-05
+S4 HRT 50 d,B,Human health (DALY),"Direct emissions (HTC off-gas, digestion, upgrading)",3.5488434076346946e-05
+S4 HRT 50 d,B,Human health (DALY),Hydrochar combustion and ash disposal,0.00013261899008601787
+S4 HRT 50 d,B,Human health (DALY),"Other (AD and dewatering electricity, PSA)",2.8014840919528906e-05
+S4 HRT 50 d,B,Human health (DALY),Credit: Quebec industrial heat mix,-0.00020060166789070434
+S4 HRT 50 d,B,Human health (DALY),Credit: natural gas heat,-0.0006673084744527875
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),HTC and drying (electricity),6.953859810921886
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),Digester heat (natural gas),51.382691611840414
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),Dilution water and wastewater treatment,9.521874042281446
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),"Direct emissions (HTC off-gas, digestion, upgrading)",18.94872474790627
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),Hydrochar combustion and ash disposal,217.49521280586399
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),"Other (AD and dewatering electricity, PSA)",5.560715598518356
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),Credit: Quebec industrial heat mix,-123.67566757197855
+S4 HRT 50 d,B,Ecosystem quality (PDF.m2.yr),Credit: natural gas heat,-384.9906163784244

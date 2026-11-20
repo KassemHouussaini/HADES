@@ -1,26 +1,29 @@
 """
-ADM1_fixed.py — Scientifically grounded ADM1 implementation
-============================================================
-Supports:
-  Pathway A : HTC process water  → AD
-  Pathway B : Raw feedstock      → AD  (digestate optionally → HTC)
+ADM1.py
+=======
+Anaerobic Digestion Model No. 1 (Batstone et al., 2002) with the BSM2
+physico-chemical and kinetic parameters, and the PW-ADM1 extension for HTC
+process water.
 
+Substrates:
+  Pathway A : HTC process water -> AD (PW-ADM1, pw_mode=True)
+  Pathway B : raw feedstock     -> AD (standard ADM1)
 Modes:
-  mode="batch"      — BMP protocol (VDI 4630).
-  mode="continuous" — CSTR.
+  "batch"      : BMP test (VDI 4630), used for the PW-ADM1 validation.
+  "continuous" : CSTR, used in the case study.
 
-PW-ADM1 extensions (v4):
-  [PW-1] Six recalcitrant SI sub-pools replace the two lumped fast/slow pools:
-          S_I_furan, S_I_alcohol, S_I_phenol, S_I_acid, S_I_ketone, S_I_humic
-          Each leaks into S_su at a first-order rate k_leak derived from
-          Zhou et al. (2024b) average removal at 25d HRT.
-  [PW-2] Non-competitive inhibition of methanogenesis (I_10, I_11, I_12) by
-          all six sub-pools using literature K_I values. Alcohol-like and
-          carboxylic acid-like pools assigned K_I = 10 kg COD/m3 (low
-          inhibition at PW concentrations; Monlau et al. 2014; Akunna et al. 1993).
-  [PW-3] Sub-pool initial concentrations derived from temperature-dependent
-          composition table (literature-reconciled, Section 2.X.5) scaled by
-          total SI and fast/slow partition calibrated from UASB effluent data.
+PW-ADM1 extension:
+  [PW-1] The soluble inert COD S_I of the process water is split into six
+         sub-pools (furan-, alcohol-, phenol-, carboxylic acid-,
+         ketone/pyrazine- and humic-like). Each degrades to S_su at a
+         first-order rate k_deg = -ln(1 - removal) / 25 d, from the average
+         removals at 25 d HRT of Zhou et al. (2024).
+  [PW-2] Non-competitive inhibition of propionate, acetate and hydrogen
+         uptake (I_10, I_11, I_12) by all six sub-pools, with the K_I values
+         in PW_ADM1_PARAMS.
+  [PW-3] Initial sub-pool concentrations: total S_I x fast/slow partition
+         (calibrated on UASB effluent data, Tanguay-Rioux et al., 2026) x the
+         temperature-dependent composition in SI_COMPOSITION.
 """
 
 import numpy as np
@@ -111,33 +114,33 @@ def compute_S_IC(pH=7.2, T_op_K=308.15, p_CO2_atm=0.0005):
 # ─────────────────────────────────────────────────────────────────────────────
 
 PW_ADM1_PARAMS = {
-    # k_leak (d-1) — derived from Zhou et al. (2024b) average removal at 25d HRT
-    # k_leak = -ln(1 - removal_efficiency) / 25
-    "k_leak_furan":   0.1842,   # ~99% removal — fast, readily degraded
-    "k_leak_alcohol": 0.1842,   # ~99% removal — fast, non-toxic
-    "k_leak_phenol":  0.0848,   # ~88% removal — fast but slower than furans
-    "k_leak_acid":    0.1063,   # ~99% removal — fast, non-toxic
-    "k_leak_ketone":  0.0277,   # ~50% removal — slow
-    "k_leak_humic":   0.004,   # ~55% removal — slow
+    # k_deg (d-1) = -ln(1 - removal) / 25, average removal at 25 d HRT
+    # (Zhou et al., 2024); complete removal is taken as 99 %.
+    "k_leak_furan":   0.1842,   # 99 % removal
+    "k_leak_alcohol": 0.1842,   # 99 % removal
+    "k_leak_phenol":  0.0848,   # 88 % removal
+    "k_leak_acid":    0.1063,   # 92 % removal
+    "k_leak_ketone":  0.0277,   # 50 % removal
+    "k_leak_humic":   0.004,    # 10 % removal (assumed; no degradation at usual HRT)
 
-    # K_I (kg COD/m3) — non-competitive inhibition of methanogenesis
-    # Sources: Ghasimi et al. 2016 (furan); Chapleur et al. 2013 (phenol);
-    #          Fedorak & Hrudey 1989, Liu et al. 2019 (ketone);
-    #          Azman et al. 2018, Li et al. 2021 (humic);
-    #          Monlau et al. 2014 (alcohol); Akunna et al. 1993 (acid)
+    # K_I (kg COD/m3), non-competitive inhibition.
+    # Furan: Ghasimi et al. (2016), Kim and Karthikeyan (2021). Phenol: Chapleur
+    # et al. (2016), He et al. (2022). Ketone/pyrazine: Kizza and Eskicioglu
+    # (2025). Humic: Yap et al. (2018). Alcohol- and acid-like pools: 10,
+    # assumed (practically no inhibition at process water concentrations).
     "K_I_furan":   1.5,
-    "K_I_alcohol": 10.0,   # low inhibition at PW concentrations
+    "K_I_alcohol": 10.0,
     "K_I_phenol":  1.0,
-    "K_I_acid":    10.0,   # low inhibition at PW concentrations
+    "K_I_acid":    10.0,
     "K_I_ketone":  1.9,
     "K_I_humic":   10.0,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SI COMPOSITION TABLE  [PW-3]
-# Fractional composition of SI across six sub-pools as function of T_HTC.
-# Literature-reconciled from published compound-class concentrations,
-# normalised to sum to 1.0 at each temperature node (Section 2.X.5).
+# S_I COMPOSITION TABLE  [PW-3]
+# Fraction of S_I in each sub-pool as a function of T_HTC, defined from a
+# literature review of compound classes in HTC process water and expert
+# judgment, normalized to 1.0 at each temperature node.
 # ─────────────────────────────────────────────────────────────────────────────
 
 SI_TEMPS = [160, 180, 200, 220, 240, 260, 280]
@@ -152,16 +155,13 @@ SI_COMPOSITION = {
     "humic":   [0.179,  0.167,  0.190,  0.202,  0.212,  0.212,  0.233],
 }
 
-# Sub-pool rate classification (for fast/slow partitioning)
+# Rate classes for the fast/slow partition
 SI_FAST_POOLS = ["furan", "alcohol", "phenol", "acid"]
 SI_SLOW_POOLS = ["ketone", "humic"]
 
 
 def get_si_composition(T_HTC):
-    """
-    Linear interpolation of SI sub-pool fractions at T_HTC.
-    Returns dict of fractions summing to 1.0.
-    """
+    """Sub-pool fractions of S_I at T_HTC (linear interpolation, sum = 1)."""
     T = float(np.clip(T_HTC, 160, 280))
     i = int(np.clip(np.searchsorted(SI_TEMPS, T, side='right') - 1,
                     0, len(SI_TEMPS) - 2))
@@ -169,18 +169,31 @@ def get_si_composition(T_HTC):
     alpha = (T - t0) / (t1 - t0)
     fracs = {k: (1 - alpha) * v[i] + alpha * v[i + 1]
              for k, v in SI_COMPOSITION.items()}
-    # Normalise to ensure exact closure at interpolated T
+    # renormalize so the interpolated fractions sum exactly to 1
     total = sum(fracs.values())
     return {k: v / total for k, v in fracs.items()}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HYBRID ELEMENTAL → ADM1 FRACTION DERIVATION
+# ELEMENTAL COMPOSITION -> ADM1 INPUT FRACTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
                            substrate_type="feedstock",
                            T_HTC=180.0):
+    """
+    COD fractions of the ADM1 input state variables from the elemental
+    composition (kg) of the substrate.
+
+    substrate_type="htc_pw" (Pathway A): S_I = 0.25 + 0.10 (T_HTC - 180)/60,
+        bounded to [0.25, 0.50]; no particulate inerts; 75 % of the
+        biodegradable COD soluble, of which 5 % as VFA.
+    substrate_type="feedstock" (Pathway B): S_I = 0.02 and X_I = 0.08
+        (Gallipoli et al., 2024); 27 % of the biodegradable COD soluble
+        (Graunke and Wilkie, 2014).
+    Protein from N (16 % N in protein) and lipids from the O/C ratio; the
+    rest is carbohydrate. Returns fractions summing to 1.
+    """
     m_org = C + H + O + N + S
     if m_org <= 0:
         raise ValueError("derive_adm1_fractions: all elemental masses are zero.")
@@ -190,12 +203,7 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
     if substrate_type == "htc_pw":
         OC_mol   = (O / MW_O) / max(C / MW_C, 1e-9)
         NC_mol   = (N / MW_N) / max(C / MW_C, 1e-9)
-        #S_I_frac = float(np.clip(
-         #   0.80 - 0.45 * OC_mol + 0.30 * NC_mol + 0.0015 * (T_HTC - 180),
-          #  0.15, 0.90))
-
         S_I_frac = float(np.clip(0.25 + 0.10 * ((T_HTC - 180) / 60), 0.25, 0.50))
-        #S_I_frac = 0.2
         print(f"[S_I_frac | htc_pw] OC={OC_mol:.3f}  NC={NC_mol:.3f}  "
               f"T={T_HTC}°C  →  S_I_frac={S_I_frac:.3f}  "
               f"predicted BMP={(1-S_I_frac)*350:.0f} mL/g COD")
@@ -273,6 +281,7 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
 
 
 def _print_fractions(fractions, substrate_type, C, H, O, N, S):
+    """Print the elemental ratios and the non-negligible ADM1 fractions."""
     m_org  = C + H + O + N + S
     HC_mol = (H / MW_H) / max(C / MW_C, 1e-9)
     OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
@@ -409,6 +418,16 @@ def _dae_solve(sv, c):
     k_L_a = c["k_L_a"]; K_H_h2 = c["K_H_h2"]
 
     tol = 1e-12; maxIter = 1000; eps = 1e-7
+
+    # Same sub-pool inhibition factor as I_10 and I_12 in the ODE, so that the
+    # quasi-steady H2 balance conserves COD (sub-pools are zero in Pathway B).
+    I_tox_h2 = 1.0
+    if H2_TOX_CONSISTENT:
+        for _sp in SI_SUBPOOL_NAMES:
+            _si = max(sv.get(f"S_I_{_sp}", 0.0), 0.0)
+            if _si > 0.0:
+                _ki = PW_ADM1_PARAMS[f"K_I_{_sp}"]
+                I_tox_h2 *= _ki / (_ki + _si)
     S_va_ion = S_bu_ion = S_pro_ion = S_ac_ion = S_hco3_ion = S_nh3 = 0.0
 
     for _ in range(maxIter):
@@ -458,21 +477,21 @@ def _dae_solve(sv, c):
         R7  = k_m_fa  * Sfa  / (K_S_fa  + Sfa)  * Xfa  * I_pH_aa * I_IN * Ih2fa
         R8  = k_m_c4  * Sva  / (K_S_c4  + Sva)  * Xc4  * (Sva / (Sbu + Sva + eps)) * I_pH_aa * I_IN * Ih2c4
         R9  = k_m_c4  * Sbu  / (K_S_c4  + Sbu)  * Xc4  * (Sbu / (Sbu + Sva + eps)) * I_pH_aa * I_IN * Ih2c4
-        R10 = k_m_pro * Spro / (K_S_pro + Spro) * Xpro * I_pH_aa * I_IN * Ih2pro
-        R12 = k_m_h2  * S_h2 / (K_S_h2  + S_h2) * Xh2  * I_pH_h2 * I_IN
+        R10 = k_m_pro * Spro / (K_S_pro + Spro) * Xpro * I_pH_aa * I_IN * Ih2pro * I_tox_h2
+        R12 = k_m_h2  * S_h2 / (K_S_h2  + S_h2) * Xh2  * I_pH_h2 * I_IN * I_tox_h2
         p_h2 = S_gas_h2 * R * T_op / MW_H2_gas
         RT8  = k_L_a * (S_h2 - MW_H2_gas * K_H_h2 * p_h2)
         delta = ((1-Y_su)*f_h2_su*R5 + (1-Y_aa)*f_h2_aa*R6
                  + (1-Y_fa)*0.3*R7 + (1-Y_c4)*0.15*R8
                  + (1-Y_c4)*0.2*R9 + (1-Y_pro)*0.43*R10
                  - R12 - RT8)
-        grad = (- k_m_h2 / (K_S_h2 + S_h2) * Xh2 * I_pH_h2 * I_IN
-                + k_m_h2 * S_h2 / (K_S_h2 + S_h2)**2 * Xh2 * I_pH_h2 * I_IN
+        grad = (- k_m_h2 / (K_S_h2 + S_h2) * Xh2 * I_pH_h2 * I_IN * I_tox_h2
+                + k_m_h2 * S_h2 / (K_S_h2 + S_h2)**2 * Xh2 * I_pH_h2 * I_IN * I_tox_h2
                 - k_L_a
                 - (1-Y_fa)*0.3  * k_m_fa  * Sfa  / (K_S_fa  + Sfa)  * Xfa  * I_pH_aa * I_IN / (1 + S_h2/K_I_h2_fa)**2  / K_I_h2_fa
                 - (1-Y_c4)*0.15 * k_m_c4  * Sva  / (K_S_c4  + Sva)  * Xc4  * (Sva/(Sbu+Sva+eps)) * I_pH_aa * I_IN / (1 + S_h2/K_I_h2_c4)**2  / K_I_h2_c4
                 - (1-Y_c4)*0.2  * k_m_c4  * Sbu  / (K_S_c4  + Sbu)  * Xc4  * (Sbu/(Sbu+Sva+eps)) * I_pH_aa * I_IN / (1 + S_h2/K_I_h2_c4)**2  / K_I_h2_c4
-                - (1-Y_pro)*0.43* k_m_pro * Spro / (K_S_pro + Spro) * Xpro * I_pH_aa * I_IN / (1 + S_h2/K_I_h2_pro)**2 / K_I_h2_pro)
+                - (1-Y_pro)*0.43* k_m_pro * Spro / (K_S_pro + Spro) * Xpro * I_pH_aa * I_IN * I_tox_h2 / (1 + S_h2/K_I_h2_pro)**2 / K_I_h2_pro)
         S_h2 -= delta / (grad if abs(grad) > 1e-20 else 1e-20)
         if S_h2 <= 0:
             S_h2 = tol
@@ -504,15 +523,19 @@ STATE_NAMES_BASE = [
     "S_gas_h2","S_gas_ch4","S_gas_co2",
 ]
 
-# [PW-1] Six SI sub-pools replace the two lumped fast/slow pools.
-# All six are differential state variables (ODE).
+# [PW-1] Six S_I sub-pools, all differential state variables.
 PW_EXTRA_STATES = [
     "S_I_furan", "S_I_alcohol", "S_I_phenol",
     "S_I_acid",  "S_I_ketone",  "S_I_humic",
 ]
 
-# All sub-pool names (convenient list for iteration)
+# sub-pool names
 SI_SUBPOOL_NAMES = ["furan", "alcohol", "phenol", "acid", "ketone", "humic"]
+
+# Apply the sub-pool inhibition factor of I_10 and I_12 also in the
+# quasi-steady H2 balance of _dae_solve (required for COD conservation in
+# Pathway A).
+H2_TOX_CONSISTENT = True
 
 STATE_NAMES = STATE_NAMES_BASE + PW_EXTRA_STATES
 IDX = {k: i for i, k in enumerate(STATE_NAMES)}
@@ -532,14 +555,13 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
     """
     Return ODE callable ode(t, y).
 
-    pw_mode=True activates PW-ADM1 extensions [PW-1, PW-2, PW-3]:
-      [PW-1] Six SI sub-pools each leak into S_su at first-order rate k_leak.
-      [PW-2] All six sub-pools exert non-competitive inhibition on
-             methanogenesis (I_10, I_11, I_12) via multiplicative K_I terms.
-             Alcohol and acid pools: K_I = 10 kg COD/m3 (minor inhibition).
-      Acidogens (I_5 to I_9) are unaffected — consistent with literature
-      showing HTC inhibitors primarily target methanogens.
-    pw_mode=False (Pathway B) = standard BSM2 ODE, zero overhead.
+    pw_mode=True activates the PW-ADM1 extension:
+      [PW-1] each of the six S_I sub-pools degrades to S_su at rate k_deg;
+      [PW-2] the six sub-pools inhibit propionate, acetate and hydrogen
+             uptake (I_10, I_11, I_12) through multiplicative K_I terms.
+      Acidogenic processes (I_5 to I_9) are not inhibited, as HTC process
+      water inhibitors mainly affect methanogens.
+    pw_mode=False (Pathway B): standard ADM1.
     """
     I = idx_map.__getitem__
 
@@ -576,7 +598,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
     Ka_va=c["K_a_va"]; Ka_bu=c["K_a_bu"]; Ka_pro=c["K_a_pro"]
     Ka_ac=c["K_a_ac"]; Ka_co2=c["K_a_co2"]; Ka_IN=c["K_a_IN"]
 
-    # Pre-extract PW k_leak and K_I values once at ODE build time (not per call)
+    # sub-pool parameters read once when the ODE is built
     if pw_mode:
         kl_furan   = PW_ADM1_PARAMS["k_leak_furan"]
         kl_alcohol = PW_ADM1_PARAMS["k_leak_alcohol"]
@@ -622,7 +644,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
         in_XI   = _get("_inf_X_I",    "X_I",    0.0)
         in_cat  = _get("_inf_S_cation","S_cation",0.06)
         in_an   = _get("_inf_S_anion", "S_anion", 0.04)
-        # PW sub-pool influent concentrations
+        # sub-pool influent concentrations
         if pw_mode:
             in_SI_furan   = _get("_inf_S_I_furan",   "S_I_furan",   0.0)
             in_SI_alcohol = _get("_inf_S_I_alcohol",  "S_I_alcohol", 0.0)
@@ -650,7 +672,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
         S_gas_ch4  = y[I("S_gas_ch4")]; S_gas_co2  = y[I("S_gas_co2")]
         S_co2 = max(S_IC - S_hco3_ion, 0.0)
 
-        # ── [PW-1] Read six SI sub-pool concentrations ────────────────────
+        # ── [PW-1] sub-pool concentrations ─────────────────────────────────
         if pw_mode:
             S_I_furan   = max(y[I("S_I_furan")],   0.0)
             S_I_alcohol = max(y[I("S_I_alcohol")],  0.0)
@@ -659,7 +681,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
             S_I_ketone  = max(y[I("S_I_ketone")],   0.0)
             S_I_humic   = max(y[I("S_I_humic")],    0.0)
 
-            # First-order leak of each sub-pool into S_su
+            # first-order degradation of each sub-pool to S_su
             leak_furan   = kl_furan   * S_I_furan
             leak_alcohol = kl_alcohol * S_I_alcohol
             leak_phenol  = kl_phenol  * S_I_phenol
@@ -669,10 +691,9 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
             Rho_leak_su  = (leak_furan + leak_alcohol + leak_phenol +
                             leak_acid  + leak_ketone  + leak_humic)
 
-            # ── [PW-2] Non-competitive inhibition on methanogenesis ────────
-            # All six sub-pools contribute multiplicatively.
-            # Alcohol (K_I=10) and acid (K_I=10): minor but non-zero effect.
-            # Applied only to I_10 (propionate), I_11 (acetate), I_12 (H2).
+            # ── [PW-2] non-competitive inhibition of methanogenesis ─────────
+            # Product of the six sub-pool factors, applied to I_10
+            # (propionate), I_11 (acetate) and I_12 (H2) only.
             I_tox = (KI_furan   / (KI_furan   + S_I_furan)  *
                      KI_alcohol / (KI_alcohol + S_I_alcohol) *
                      KI_phenol  / (KI_phenol  + S_I_phenol)  *
@@ -687,7 +708,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
             Rho_leak_su = 0.0
             I_tox = 1.0
 
-        # ── Standard BSM2 inhibition terms ────────────────────────────────
+        # ── standard ADM1 inhibition terms ────────────────────────────────
         I_pH_aa  = (K_pH_aa**nn_aa) / (S_H_ion**nn_aa + K_pH_aa**nn_aa)
         I_pH_ac  = (K_pH_ac**n_ac)  / (S_H_ion**n_ac  + K_pH_ac**n_ac)
         I_pH_h2  = (K_pH_h2**n_h2)  / (S_H_ion**n_h2  + K_pH_h2**n_h2)
@@ -697,9 +718,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
         I_h2_pro = 1.0 / (1.0 + S_h2 / K_I_h2_pro)
         I_nh3    = 1.0 / (1.0 + S_nh3 / K_I_nh3)
 
-        # ── [PW-2] I_tox applied selectively to methanogens only ──────────
-        # I_5  to I_9  (acidogens, LCFA, C4): standard BSM2, no I_tox
-        # I_10 to I_12 (propionate, acetate, H2 methanogens): multiplied by I_tox
+        # ── [PW-2] I_tox applied to I_10 to I_12 only ─────────────────────
         I_5  = I_pH_aa * I_IN_lim
         I_6  = I_5
         I_7  = I_pH_aa * I_IN_lim * I_h2_fa
@@ -763,7 +782,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
 
         dy = np.zeros(len(STATE_NAMES))
 
-        # ── Dilution terms (continuous mode) ──────────────────────────────
+        # ── dilution terms (continuous mode) ──────────────────────────────
         if mode == "continuous":
             dy[I("S_su")]     += D * (in_su   - S_su)
             dy[I("S_aa")]     += D * (in_aa   - S_aa)
@@ -791,7 +810,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
             dy[I("X_I")]      += D * (in_XI   - X_I)
             dy[I("S_cation")] += D * (in_cat  - S_cation)
             dy[I("S_anion")]  += D * (in_an   - S_anion)
-            # [PW-1] Six sub-pool dilution terms
+            # [PW-1] sub-pool dilution terms
             if pw_mode:
                 dy[I("S_I_furan")]   += D * (in_SI_furan   - S_I_furan)
                 dy[I("S_I_alcohol")] += D * (in_SI_alcohol - S_I_alcohol)
@@ -800,8 +819,8 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
                 dy[I("S_I_ketone")]  += D * (in_SI_ketone  - S_I_ketone)
                 dy[I("S_I_humic")]   += D * (in_SI_humic   - S_I_humic)
 
-        # ── BSM2 biochemical reactions ─────────────────────────────────────
-        # [PW-1] Total leak from all six sub-pools enters S_su
+        # ── biochemical reactions ──────────────────────────────────────────
+        # [PW-1] degraded sub-pool COD enters S_su
         dy[I("S_su")]     += Rho_2 + (1-f_fa_li)*Rho_4 - Rho_5 + Rho_leak_su
         dy[I("S_aa")]     += Rho_3 - Rho_6
         dy[I("S_fa")]     += f_fa_li*Rho_4 - Rho_7
@@ -847,9 +866,7 @@ def _build_ode(c, V_liq, V_gas, STATE_NAMES, idx_map, mode, influent, q_ad,
         dy[I("S_gas_ch4")] = Rho_T_9  * V_liq / V_gas - (q_gas / V_gas) * S_gas_ch4
         dy[I("S_gas_co2")] = Rho_T_10 * V_liq / V_gas - (q_gas / V_gas) * S_gas_co2
 
-        # ── [PW-1] Six sub-pool ODEs: loss = leak + dilution ──────────────
-        # Dilution already added in the continuous block above.
-        # Biochemical loss = first-order leak to S_su only.
+        # ── [PW-1] sub-pool ODEs: first-order degradation (dilution above) ──
         dy[I("S_I_furan")]   -= leak_furan
         dy[I("S_I_alcohol")] -= leak_alcohol
         dy[I("S_I_phenol")]  -= leak_phenol
@@ -900,7 +917,7 @@ def _build_adm1_dict(fractions, COD_conc, S_IN, S_IC,
         "_total_COD_kg":   total_COD,
         "_fractions":      fractions,
     }
-    # Initialise PW sub-pool keys to zero (overwritten in translate_pw if pw_mode)
+    # sub-pools start at zero (set by translate_pw in Pathway A)
     for sp in SI_SUBPOOL_NAMES:
         d[f"S_I_{sp}"]      = 0.0
         d[f"_inf_S_I_{sp}"] = 0.0
@@ -924,12 +941,11 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
     """
     Convert HTC process water elemental composition + volume into ADM1 dict.
 
-    [PW-3] SI sub-pool initialisation:
-      Total SI = fractions["S_I"] * COD_conc
-      Fast/slow split: linear interpolation from UASB calibration data
-        f_slow = 0.40 at 180°C → 0.50 at 240°C (Tanguay-Rioux et al. 2026)
-      Within each rate class, sub-pool fractions from SI_COMPOSITION table
-      (temperature-interpolated).
+    [PW-3] Sub-pool initialization:
+      total S_I  = fractions["S_I"] x COD_conc
+      slow share f_slow = 0.40 + 0.10 (T_HTC - 180)/60, calibrated on UASB
+        effluent soluble COD (Tanguay-Rioux et al., 2026)
+      within each rate class, sub-pool shares from SI_COMPOSITION at T_HTC.
     """
     m_org      = C_pw + H_pw + O_pw + N_pw + S_pw
     total_COD  = compute_thod(C_pw, H_pw, O_pw, N_pw, S_pw)
@@ -965,11 +981,12 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
         V_dig_meta = V_feed_diluted + V_inoc
                     
         print(f"[translate_pw batch] VS_sub={VS_sub:.2f} kg  "
-              f"V_inoc={V_inoc:.4f} m³  ISR={ISR_batch}  "    # ← use ISR_batch
+              f"V_inoc={V_inoc:.4f} m³  ISR={ISR_batch}  "
               f"V_dig={V_dig_meta:.4f} m³")
 
     S_IN, f_IN = compute_S_IN(N_pw, V_feed_diluted, "htc_pw", T_HTC, RT_HTC)
-    S_IC = float(np.clip(COD_conc * 0.8 / 61.0, 0.08, 0.20)) #compute_S_IC(pH=pH_target, T_op_K=T_op, p_CO2_atm=0.0005)
+    # initial inorganic carbon (kmol C/m3), bounded to 0.08-0.20
+    S_IC = float(np.clip(COD_conc * 0.8 / 61.0, 0.08, 0.20))
 
     fractions = derive_adm1_fractions(C_pw, H_pw, O_pw, N_pw, S_pw,
                                        substrate_type="htc_pw", T_HTC=T_HTC)
@@ -992,13 +1009,11 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
     d["_COD_conc_raw"]      = COD_conc_raw
     d["_dilution_factor"]   = V_feed_diluted / V_feed
 
-    # ── [PW-3] Initialise six SI sub-pools ───────────────────────────────
+    # ── [PW-3] sub-pool initialization ──────────────────────────────────
     S_I_total = fractions["S_I"] * COD_conc
 
-    # Fast/slow partition varies linearly with HTC temperature
-    # Calibrated from UASB steady-state effluent sCOD data:
-    #   180°C: f_slow = 0.40  (effluent sCOD = 17.5% of feed)
-    #   240°C: f_slow = 0.50  (effluent sCOD = 23.0% of feed)
+    # slow share, linear in T_HTC, calibrated on UASB steady-state effluent
+    # soluble COD (17.5 % of the feed at 180 C, 23.0 % at 240 C)
     _f_slow_override = PW_ADM1_PARAMS.get("f_slow_override", None)
     if _f_slow_override is not None:
         f_slow = float(np.clip(_f_slow_override, 0, 1))
@@ -1010,14 +1025,11 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
         ))
     f_fast = 1.0 - f_slow
 
-    # Temperature-interpolated composition fractions
+    # composition at T_HTC
     si_fracs = get_si_composition(T_HTC)
 
-    # Assign each sub-pool from its rate class fraction × composition fraction
-    # Fast pools: furan, alcohol, phenol, acid
-    # Slow pools: ketone, humic
-    # Within each class the composition fractions are re-normalised so they
-    # sum to 1.0 within that class, then scaled by the class total COD.
+    # each sub-pool = class total COD x its composition share renormalized
+    # within the class (fast: furan, alcohol, phenol, acid; slow: ketone, humic)
     fast_total_frac = sum(si_fracs[sp] for sp in SI_FAST_POOLS)
     slow_total_frac = sum(si_fracs[sp] for sp in SI_SLOW_POOLS)
 
@@ -1031,7 +1043,7 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
         d[f"S_I_{sp}"]      = val
         d[f"_inf_S_I_{sp}"] = val
 
-    # Standard S_I zeroed — entirely replaced by six sub-pools
+    # S_I is carried entirely by the six sub-pools
     d["S_I"]      = 0.0
     d["_inf_S_I"] = 0.0
 
@@ -1117,7 +1129,7 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     d["_ash_kg"]            = ash_kg
     d["_m_dry_kg"]          = m_dry
     d["_m_org_kg"]          = m_org
-    d["_pw_mode"]           = False   # Pathway B — no PW extensions
+    d["_pw_mode"]           = False   # Pathway B: standard ADM1
 
     print(f"[translate_feedstock] mode={mode}  COD_conc={COD_conc_inf:.3f} kgCOD/m³")
     if mode == "continuous" and HRT_days:
@@ -1289,13 +1301,12 @@ def run_adm1(substrate,
         sv0["S_h2"] = 1e-8; sv0["S_ch4"] = 1e-8
         if mode == "batch":
             if pw_mode_sub:
-                # Pathway A: S_IC already set correctly by translate_pw (0.08+)
+                # Pathway A: S_IC set by translate_pw
                 sv0["S_IC"]     = substrate.get("S_IC", 0.08)
                 sv0["S_cation"] = substrate.get("S_cation", 0.04)
             else:
-                # Pathway B: substrate dict has S_IC=0.01 (from compute_S_IC at pH=8)
-                # Override with realistic inoculum buffer — VDI 4630 inocula
-                # typically have 0.05-0.15 kmolC/m³ alkalinity
+                # Pathway B: inoculum alkalinity (VDI 4630 inocula typically
+                # 0.05-0.15 kmol C/m3)
                 sv0["S_IC"]     = max(substrate.get("S_IC", 0.07), 0.07)
                 sv0["S_cation"] = max(substrate.get("S_cation", 0.04), 0.12)
         else:

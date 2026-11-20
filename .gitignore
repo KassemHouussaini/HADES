@@ -1,0 +1,19 @@
+# Manuscript and submission files (not part of the code release)
+*.docx
+~$*
+Claude outputs/
+_archive/
+GITHUB_BASE_COMMIT.txt
+
+# Python and Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Environments and OS files
+.venv/
+venv/
+.env
+.DS_Store
+Thumbs.db

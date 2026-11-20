@@ -1,0 +1,100 @@
+{
+  "Bio_char(%)": {
+    "name": "rs00",
+    "params": {
+      "subsample": 0.7,
+      "reg_lambda": 1.0,
+      "reg_alpha": 0.0,
+      "n_estimators": 1000,
+      "min_child_weight": 1,
+      "max_depth": 4,
+      "learning_rate": 0.1,
+      "colsample_bytree": 1.0
+    },
+    "search_R2_5fold": 0.8660764179809514
+  },
+  "HHVo(Mj/kg)": {
+    "name": "rs02",
+    "params": {
+      "subsample": 0.9,
+      "reg_lambda": 1.0,
+      "reg_alpha": 0.5,
+      "n_estimators": 1000,
+      "min_child_weight": 7,
+      "max_depth": 6,
+      "learning_rate": 0.03,
+      "colsample_bytree": 0.8
+    },
+    "search_R2_5fold": 0.9118147510745793
+  },
+  "Co(%)": {
+    "name": "rs23",
+    "params": {
+      "subsample": 0.9,
+      "reg_lambda": 3.0,
+      "reg_alpha": 0.5,
+      "n_estimators": 1000,
+      "min_child_weight": 7,
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "colsample_bytree": 1.0
+    },
+    "search_R2_5fold": 0.943616295888407
+  },
+  "Ho(%)": {
+    "name": "rs25",
+    "params": {
+      "subsample": 0.7,
+      "reg_lambda": 10.0,
+      "reg_alpha": 0.5,
+      "n_estimators": 600,
+      "min_child_weight": 1,
+      "max_depth": 6,
+      "learning_rate": 0.05,
+      "colsample_bytree": 0.6
+    },
+    "search_R2_5fold": 0.9057181130314744
+  },
+  "No(%)": {
+    "name": "rs12",
+    "params": {
+      "subsample": 0.7,
+      "reg_lambda": 3.0,
+      "reg_alpha": 0.0,
+      "n_estimators": 600,
+      "min_child_weight": 3,
+      "max_depth": 8,
+      "learning_rate": 0.05,
+      "colsample_bytree": 0.8
+    },
+    "search_R2_5fold": 0.9283892109020648
+  },
+  "So(%)": {
+    "name": "rs15",
+    "params": {
+      "subsample": 0.7,
+      "reg_lambda": 1.0,
+      "reg_alpha": 0.0,
+      "n_estimators": 600,
+      "min_child_weight": 7,
+      "max_depth": 5,
+      "learning_rate": 0.03,
+      "colsample_bytree": 0.6
+    },
+    "search_R2_5fold": 0.8924185870479434
+  },
+  "Asho": {
+    "name": "rs00",
+    "params": {
+      "subsample": 0.7,
+      "reg_lambda": 1.0,
+      "reg_alpha": 0.0,
+      "n_estimators": 1000,
+      "min_child_weight": 1,
+      "max_depth": 4,
+      "learning_rate": 0.1,
+      "colsample_bytree": 1.0
+    },
+    "search_R2_5fold": 0.9804202737367008
+  }
+}
