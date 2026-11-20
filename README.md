@@ -67,7 +67,7 @@ The framework is intended for:
 ```
 ADM1/                            PW-ADM1, system builder, heat integration, LCA contributions, tests
 ML training scripts and models/  HTC surrogate (XGBoost), training data, training and tuning scripts
-notebooks/                       case study and PW-ADM1 validation notebooks of the article
+notebooks/                       HADES.ipynb (run one system) and the case study and PW-ADM1 validation notebooks
 results/                         case study, sensitivity, LCI and Supporting Information tables
 figures/                         figure scripts and exported figures of the article
 app.py                           Streamlit interface
@@ -113,6 +113,7 @@ The script ends with a check listing what the project contains. Projects are sto
 ## ▶️ Running HADES
 
 - **Interface:** `streamlit run app.py`, then choose the project, background database and LCIA indicators in the sidebar (section 5).
+- **One system, your own inputs (code):** open `notebooks/HADES.ipynb`, set the user decisions in its first cell (pathway, feedstock, HTC and AD conditions, Brightway project) and run all cells.
 - **Article case study:** run `notebooks/case_study.ipynb` (set `PROJECT` and `EI_NAME` in its first cell to your project), then `notebooks/PW-ADM1 verification figure.ipynb` and `ML training scripts and models/ML verification figure.ipynb`. Results are written to `results/` and figures to `figures/`.
 - **Tests:** `cd ADM1` then `python -m pytest` (no Brightway needed).
 
