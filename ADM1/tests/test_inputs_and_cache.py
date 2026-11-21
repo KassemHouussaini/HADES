@@ -1,5 +1,5 @@
 """Input checks of build_system (check_inputs), feedstock helpers
-(close_feed, perturb_feed) and the self-invalidating LCA score cache of
+(close_feed) and the self-invalidating LCA score cache of
 lca_contributions. No Brightway needed."""
 import importlib.util, os, sys, types
 from types import SimpleNamespace
@@ -28,34 +28,6 @@ def test_close_feed_rejects_stale_O(sb):
     f["C_feed"] *= 1.2                      # composition changed, O not updated
     with pytest.raises(ValueError, match="update O"):
         sb.close_feed(f)
-
-
-def test_perturb_O_balance_moves_O_only(sb):
-    b = sb.close_feed(FW)
-    f = sb.perturb_feed(FW, "C_feed", 1.2, balance="O")
-    assert f["C_feed"] == pytest.approx(38.25 * 1.2)
-    assert b["O_feed"] - f["O_feed"] == pytest.approx(38.25 * 0.2)      # 7.65 points
-    for k in ("H_feed", "N_feed", "S_feed", "Ash_feed", "VM_feed", "FC_feed"):
-        assert f[k] == b[k]
-
-
-def test_perturb_daf_balance_keeps_ratios(sb):
-    b = sb.close_feed(FW)
-    f = sb.perturb_feed(FW, "C_feed", 1.2, balance="daf")
-    assert f["C_feed"] == pytest.approx(38.25 * 1.2)
-    assert f["Ash_feed"] == b["Ash_feed"]
-    assert f["H_feed"] / f["O_feed"] == pytest.approx(b["H_feed"] / b["O_feed"])
-    assert f["N_feed"] / f["S_feed"] == pytest.approx(b["N_feed"] / b["S_feed"])
-    assert sum(f[k] for k in sb.FEED_ELEMENT_KEYS) + f["O_feed"] == pytest.approx(100.0)
-
-
-def test_perturb_ash_daf_keeps_ash_free_composition(sb):
-    b = sb.close_feed(FW)
-    f = sb.perturb_feed(FW, "Ash_feed", 1.2, balance="daf")
-    daf = lambda g, e: g[e] / (100 - g["Ash_feed"])
-    for e in ("C_feed", "H_feed", "O_feed", "N_feed", "S_feed"):
-        assert daf(f, e) == pytest.approx(daf(b, e))
-    assert f["VM_feed"] + f["FC_feed"] + f["Ash_feed"] == pytest.approx(100.0, abs=0.01)
 
 
 # ---------------------------------------------------------------- check_inputs

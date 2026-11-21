@@ -262,46 +262,6 @@ def close_feed(feed, tol=FEED_O_TOL):
     return f
 
 
-def perturb_feed(feed, key, factor, balance="O"):
-    """
-    Multiply one component of `feed` (C_feed, H_feed, N_feed, S_feed or
-    Ash_feed) by `factor` and say explicitly what compensates, so that the
-    dry composition still sums to 100 %:
-      balance="O"    O by difference absorbs the change (Paper 1 OAT). C x 1.2
-                     on the base food waste lowers O by 7.65 % points.
-      balance="daf"  the other organic elements are rescaled proportionally
-                     (element change), or all organic elements are rescaled
-                     with the ash-free composition kept (ash change).
-    For an ash change, VM and FC are rescaled so that VM + FC + ash = 100.
-    Returns the closed feed (close_feed).
-    """
-    if key not in FEED_ELEMENT_KEYS:
-        raise ValueError(f"[perturb_feed] key {key!r} not in {FEED_ELEMENT_KEYS}")
-    if balance not in ("O", "daf"):
-        raise ValueError(f"[perturb_feed] balance {balance!r} must be 'O' or 'daf'")
-    f = close_feed(feed)
-    old, new = float(f[key]), float(f[key]) * float(factor)
-    organics = ("C_feed", "H_feed", "O_feed", "N_feed", "S_feed")
-    if key == "Ash_feed":
-        k_pr = (100.0 - new) / (f["VM_feed"] + f["FC_feed"])
-        f["VM_feed"], f["FC_feed"] = f["VM_feed"] * k_pr, f["FC_feed"] * k_pr
-        if balance == "daf":
-            k = (100.0 - new) / (100.0 - old)
-            for e in organics:
-                f[e] *= k
-    elif balance == "daf":
-        others = [e for e in organics if e != key]
-        rest = sum(f[e] for e in others)
-        k = (rest - (new - old)) / rest
-        if k <= 0:
-            raise ValueError(f"[perturb_feed] {key} x {factor}: no organic matter left to rescale")
-        for e in others:
-            f[e] *= k
-    f[key] = new
-    f.pop("O_feed")
-    return close_feed(f)
-
-
 def _check_feed(feed, label):
     missing = [k for k in FEED_KEYS if k not in feed]
     if missing:
