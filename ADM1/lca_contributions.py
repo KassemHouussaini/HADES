@@ -20,9 +20,28 @@ CATS = ["HTC and drying (electricity)", "Digester heat (natural gas)",
 _unit_score, _cf = {}, {}
 
 
+def _db_stamp(db_name, _seen=None):
+    """((database, modified), ...) for db_name and the databases it depends
+    on. bw2data updates "modified" whenever an activity or exchange of the
+    database is saved or deleted (bw2data 3.6 and 4.x: databases.set_dirty),
+    so a rebuilt foreground or a re-imported background changes the stamp."""
+    seen = set() if _seen is None else _seen
+    if db_name in seen or db_name not in bd.databases:
+        return ()
+    seen.add(db_name)
+    meta = bd.databases[db_name]
+    out = ((db_name, meta.get("modified")),)
+    for dep in sorted(meta.get("depends") or []):
+        out += _db_stamp(dep, seen)
+    return out
+
+
 def unit_score(act, method):
-    """Score of 1 unit of an activity (cached)."""
-    k = (act.key, method)
+    """Score of 1 unit of an activity. Cached per project, activity, method
+    and database stamp (_db_stamp): a score is reused only while the
+    activity's database and its dependencies are unchanged, so a change of
+    background context or a rebuilt foreground never returns a stale score."""
+    k = (bd.projects.current, act.key, tuple(method), _db_stamp(act.key[0]))
     if k not in _unit_score:
         lca = LCA({act: 1}, method); lca.lci(); lca.lcia()
         _unit_score[k] = lca.score
@@ -30,16 +49,20 @@ def unit_score(act, method):
 
 
 def clear_cache():
-    """Foreground activities change between runs: drop cached scores."""
+    """Drop all cached unit scores and characterization factors. Not needed
+    for correctness (the cache keys carry the project and database stamps);
+    use it to free memory between large batches."""
     _unit_score.clear()
+    _cf.clear()
 
 
 def cf_of(flow_key, method):
     """Characterization factor of a biosphere flow (0 if the method has none)."""
-    if method not in _cf:
-        _cf[method] = {(tuple(k) if isinstance(k, (list, tuple)) else bd.get_activity(k).key): v
-                       for k, v, *_ in bd.Method(method).load()}
-    return _cf[method].get(flow_key, 0.0)
+    mk = (bd.projects.current, tuple(method))
+    if mk not in _cf:
+        _cf[mk] = {(tuple(k) if isinstance(k, (list, tuple)) else bd.get_activity(k).key): v
+                   for k, v, *_ in bd.Method(method).load()}
+    return _cf[mk].get(flow_key, 0.0)
 
 
 def category(parent_code, exc):

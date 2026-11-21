@@ -196,10 +196,10 @@ class SystemContext:
     # Process parameters
     PATHWAY: str
     m_feedstock: float
-    default_params: dict
-    ml_params: dict
-    T_HTC: float
-    RT_HTC: float
+    default_params: dict          # the feedstock (FEED_KEYS), single source
+    ml_params: Optional[dict]     # None: built by check_inputs from default_params, T_HTC, RT_HTC
+    T_HTC: float                  # single source of the HTC temperature (C)
+    RT_HTC: float                 # single source of the HTC residence time (min)
     target_moisture_HTC: float
     MC_char: float
     target_MC_char_dry: float
@@ -221,6 +221,157 @@ class SystemContext:
     qc_heat_mix: Any = None              # foreground activity: Quebec industrial combustion heat mix
     heat_mix_components_qc: Any = None   # bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, ...)
     ash_disposal: Any = None             # ash treatment of the boiler ash (None -> omitted, printed)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INPUT CHECKS AND FEEDSTOCK HELPERS
+# build_system() calls check_inputs() before any calculation. An input outside
+# the range where a submodel is defined, or two copies of the same input that
+# disagree, raise ValueError instead of running a clipped or inconsistent case.
+# Statistical extrapolation of the HTC surrogate is not an error: it stays a
+# QA flag (qa_checks).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# HTC temperature range of the PW-ADM1 S_I composition table (ADM1.SI_TEMPS);
+# outside it get_si_composition() and f_slow would be clipped silently, and
+# the HTC gas yield correlation reaches 0 at 151.6 C.
+T_HTC_RANGE_C = (float(_adm1_core.SI_TEMPS[0]), float(_adm1_core.SI_TEMPS[-1]))
+
+FEED_ELEMENT_KEYS = ("C_feed", "H_feed", "N_feed", "S_feed", "Ash_feed")
+FEED_KEYS = FEED_ELEMENT_KEYS + ("O_feed", "VM_feed", "FC_feed", "WC")
+FEED_O_TOL = 0.01         # O_feed vs 100 - C - H - N - S - ash (% points)
+FEED_PROXIMATE_TOL = 1.0  # VM + FC + ash vs 100 (% points)
+
+
+def close_feed(feed, tol=FEED_O_TOL):
+    """
+    Copy of `feed` with O_feed = 100 - C - H - N - S - ash (O by difference,
+    % dry basis). If `feed` already has an O_feed that differs from the
+    difference by more than `tol` % points, ValueError: the composition was
+    changed without updating O.
+    """
+    f = dict(feed)
+    O = 100.0 - sum(float(f[k]) for k in FEED_ELEMENT_KEYS)
+    if O <= 0:
+        raise ValueError(f"[feed] C + H + N + S + ash = {100 - O:.2f} % of dry matter: "
+                         f"no oxygen left by difference")
+    if "O_feed" in f and abs(float(f["O_feed"]) - O) > tol:
+        raise ValueError(f"[feed] O_feed = {f['O_feed']:.3f} % but 100 - C - H - N - S - ash "
+                         f"= {O:.3f} %: update O when the composition changes (close_feed)")
+    f["O_feed"] = O
+    return f
+
+
+def perturb_feed(feed, key, factor, balance="O"):
+    """
+    Multiply one component of `feed` (C_feed, H_feed, N_feed, S_feed or
+    Ash_feed) by `factor` and say explicitly what compensates, so that the
+    dry composition still sums to 100 %:
+      balance="O"    O by difference absorbs the change (Paper 1 OAT). C x 1.2
+                     on the base food waste lowers O by 7.65 % points.
+      balance="daf"  the other organic elements are rescaled proportionally
+                     (element change), or all organic elements are rescaled
+                     with the ash-free composition kept (ash change).
+    For an ash change, VM and FC are rescaled so that VM + FC + ash = 100.
+    Returns the closed feed (close_feed).
+    """
+    if key not in FEED_ELEMENT_KEYS:
+        raise ValueError(f"[perturb_feed] key {key!r} not in {FEED_ELEMENT_KEYS}")
+    if balance not in ("O", "daf"):
+        raise ValueError(f"[perturb_feed] balance {balance!r} must be 'O' or 'daf'")
+    f = close_feed(feed)
+    old, new = float(f[key]), float(f[key]) * float(factor)
+    organics = ("C_feed", "H_feed", "O_feed", "N_feed", "S_feed")
+    if key == "Ash_feed":
+        k_pr = (100.0 - new) / (f["VM_feed"] + f["FC_feed"])
+        f["VM_feed"], f["FC_feed"] = f["VM_feed"] * k_pr, f["FC_feed"] * k_pr
+        if balance == "daf":
+            k = (100.0 - new) / (100.0 - old)
+            for e in organics:
+                f[e] *= k
+    elif balance == "daf":
+        others = [e for e in organics if e != key]
+        rest = sum(f[e] for e in others)
+        k = (rest - (new - old)) / rest
+        if k <= 0:
+            raise ValueError(f"[perturb_feed] {key} x {factor}: no organic matter left to rescale")
+        for e in others:
+            f[e] *= k
+    f[key] = new
+    f.pop("O_feed")
+    return close_feed(f)
+
+
+def _check_feed(feed, label):
+    missing = [k for k in FEED_KEYS if k not in feed]
+    if missing:
+        raise ValueError(f"[check_inputs | {label}] missing {missing}"
+                         + (" (use close_feed to add O by difference)" if missing == ["O_feed"] else ""))
+    for k in FEED_KEYS:
+        v = float(feed[k])
+        if not np.isfinite(v) or v < 0:
+            raise ValueError(f"[check_inputs | {label}] {k} = {feed[k]}")
+    if not 0.0 < float(feed["WC"]) < 100.0:
+        raise ValueError(f"[check_inputs | {label}] WC = {feed['WC']} % outside (0, 100)")
+    close_feed(feed)    # O > 0 and O_feed consistent with the other elements
+    prox = float(feed["VM_feed"]) + float(feed["FC_feed"]) + float(feed["Ash_feed"])
+    if abs(prox - 100.0) > FEED_PROXIMATE_TOL:
+        raise ValueError(f"[check_inputs | {label}] VM + FC + ash = {prox:.2f} % "
+                         f"(tolerance {FEED_PROXIMATE_TOL} % points)")
+
+
+def check_inputs(ctx, adm1_mode="batch", adm1_HRT_days=None, TS_target=0.08):
+    """
+    Validate the inputs of build_system() and return the HTC surrogate
+    parameters.
+
+    Single source: the feedstock is ctx.default_params, T and RT are
+    ctx.T_HTC and ctx.RT_HTC. ctx.ml_params may be None, or carry copies of
+    these values for backward compatibility; a copy that disagrees with the
+    single source raises ValueError instead of feeding the surrogate a
+    different case than the rest of the model.
+    """
+    feed = ctx.default_params
+    _check_feed(feed, "default_params")
+    T, RT = float(ctx.T_HTC), float(ctx.RT_HTC)
+    lo, hi_ = T_HTC_RANGE_C
+    if not lo <= T <= hi_:
+        raise ValueError(f"[check_inputs] T_HTC = {T} C outside {lo:.0f}-{hi_:.0f} C, the range of "
+                         f"the PW-ADM1 S_I composition (values would be clipped silently)")
+    if not np.isfinite(RT) or RT <= 0:
+        raise ValueError(f"[check_inputs] RT_HTC = {ctx.RT_HTC} min must be > 0")
+
+    ml = dict(ctx.ml_params or {})
+    for k in FEED_KEYS:
+        if k in ml and abs(float(ml[k]) - float(feed[k])) > 1e-9:
+            raise ValueError(f"[check_inputs] ml_params[{k!r}] = {ml[k]} but default_params[{k!r}] = "
+                             f"{feed[k]}: one feedstock per run (leave ml_params None)")
+    for k, v, name in (("T", T, "T_HTC"), ("RT", RT, "RT_HTC")):
+        if k in ml and abs(float(ml[k]) - v) > 1e-9:
+            raise ValueError(f"[check_inputs] ml_params[{k!r}] = {ml[k]} but ctx.{name} = {v}: "
+                             f"set ctx.{name} only (leave ml_params None)")
+    ml.update({k: feed[k] for k in FEED_KEYS})
+    ml["T"], ml["RT"] = T, RT
+
+    for name, v in (("target_moisture_HTC", ctx.target_moisture_HTC), ("TS_target", TS_target)):
+        if not 0.0 < float(v) < 1.0:
+            raise ValueError(f"[check_inputs] {name} = {v} outside (0, 1)")
+    mc_cake = hi.effective_MC_char(ctx.MC_char)
+    if not 0.0 <= float(ctx.target_MC_char_dry) < mc_cake:
+        raise ValueError(f"[check_inputs] target_MC_char_dry = {ctx.target_MC_char_dry} must be in "
+                         f"[0, MC_char = {mc_cake})")
+    if not float(ctx.m_feedstock) > 0:
+        raise ValueError(f"[check_inputs] m_feedstock = {ctx.m_feedstock} kg must be > 0")
+    if not float(ctx.COD_conc_target) > 0:
+        raise ValueError(f"[check_inputs] COD_conc_target = {ctx.COD_conc_target} must be > 0")
+    if adm1_mode == "continuous" and not (adm1_HRT_days is not None and float(adm1_HRT_days) > 0):
+        raise ValueError(f"[check_inputs] continuous ADM1 needs adm1_HRT_days > 0, got {adm1_HRT_days}")
+    if ctx.PATHWAY not in ("A", "B"):
+        raise ValueError(f"[check_inputs] PATHWAY = {ctx.PATHWAY!r} must be 'A' or 'B'")
+    if ctx.PATHWAY == "B" and ctx.feedstock_name not in ac.AD_CHARACTERIZATION:
+        raise ValueError(f"[check_inputs] feedstock_name = {ctx.feedstock_name!r} not in "
+                         f"{sorted(ac.AD_CHARACTERIZATION)}")
+    return ml
 
 
 def get_or_create(db, code, name, unit, location="CA-QC", type_="process"):
@@ -1032,10 +1183,13 @@ def build_system(ctx: SystemContext,
     waste_treatment, ss_state, adm1_out, feed_inputs, inv
     """
     # ── unpack the context ──────────────────────────────────────
+    # single source of the feedstock, T and RT; raises on inconsistent or
+    # out-of-range inputs (check_inputs)
+    ml_params = check_inputs(ctx, adm1_mode=adm1_mode, adm1_HRT_days=adm1_HRT_days,
+                             TS_target=TS_target)
     PATHWAY = ctx.PATHWAY
     m_feedstock = ctx.m_feedstock
     default_params = ctx.default_params
-    ml_params = ctx.ml_params
     T_HTC = ctx.T_HTC
     RT_HTC = ctx.RT_HTC
     target_moisture_HTC = ctx.target_moisture_HTC
@@ -1649,6 +1803,12 @@ def build_system(ctx: SystemContext,
 
     waste_treatment["PATHWAY"] = PATHWAY
     waste_treatment["adm1_mode"] = adm1_mode
+    # inputs of this run, so that every stored result says which case it is
+    waste_treatment["T_HTC"] = float(T_HTC)
+    waste_treatment["RT_HTC"] = float(RT_HTC)
+    for _k in FEED_KEYS:
+        waste_treatment[f"in_{_k}"] = float(default_params[_k])
+    waste_treatment["feedstock_name"] = ctx.feedstock_name
     _HRT_stored = float(adm1_out.get("HRT_days", 0.0)) if adm1_mode == "continuous" else 0.0
     waste_treatment["adm1_HRT_days"] = _HRT_stored
     waste_treatment["SubstitutionFactor_HC_COAL"] = SubstitutionFactor_HC_COAL
