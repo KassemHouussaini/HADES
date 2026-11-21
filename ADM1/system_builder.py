@@ -1244,6 +1244,7 @@ def build_system(ctx: SystemContext,
             N_feed=N_feed_mass, S_feed=S_feed_mass, ash_kg=ash_kg_feed,
             feedstock_wet_kg=m_feedstock, mode=adm1_mode,
             HRT_days=adm1_HRT_days, TS_target=TS_target,
+            feedstock_name=ctx.feedstock_name,
         )
 
         m_feedstock_slurry = feed_inputs["_m_slurry_kg"]
@@ -1844,6 +1845,8 @@ def build_system(ctx: SystemContext,
             waste_treatment["dg" + _k] = digestate_params.get(_k)
         waste_treatment["dg_NH4_source"] = _NH4_source_B
         waste_treatment["N_to_centrate_kg"] = float(N_to_centrate_kg_B)
+        for _k in ("_fD", "_f_sol", "_k_hyd"):
+            waste_treatment["adm1" + _k] = feed_inputs.get(_k)
     # caps that bound in this run (ADM1.bound / record_cap)
     if PATHWAY == "B" and "C_dig" in str(digestate_params.get("_dg_warnings", "")):
         _adm1_core.record_cap("digestate C >= 0", float("nan"), 1e-9)

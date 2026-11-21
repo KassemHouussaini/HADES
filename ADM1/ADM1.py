@@ -227,12 +227,90 @@ def get_si_composition(T_HTC):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PATHWAY B DIGESTER FEED: FEEDSTOCK-SPECIFIC DEGRADABILITY
+# fD     share of the feed COD that can be digested; X_I = 1 - fD, S_I = 0
+#        (S_I = 0 for all 11 substrates of Fisgativa et al. 2020, Data in
+#        Brief 29:105212, Table 5).
+# f_sol  part of the digestible COD already dissolved (S_su, S_aa, S_fa);
+#        the rest enters as X_ch, X_pr, X_li.
+# k_hyd  first-order hydrolysis rate of X_ch, X_pr, X_li (d-1), replacing the
+#        BSM2 value of 10 d-1.
+# Labatut, Angenent & Scott (2022) report fD as measured / theoretical
+# methane, which leaves out the COD converted to cells; ADM1 sends about 12 %
+# of the digested COD to cells (Batstone et al. 2002 yields), so their values
+# are divided by 0.88. Fisgativa et al. (2020) values come from a model that
+# already includes cells and are used as reported.
+# *_range: ranges for sweeps; None where no range is defined.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FW_FEED = dict(
+    fD=0.86, fD_range=(0.80, 0.90),
+    f_sol=0.44, f_sol_range=None,
+    k_hyd=0.18, k_hyd_range=(0.18, 0.25),
+    source=("fD, f_sol, k_hyd: Fisgativa et al. 2020 Table 3, biowaste (fD range "
+            "assumed); k_hyd upper bound: Trzcinski & Stuckey 2012, Environ. Eng. "
+            "Sci. 29:848, kitchen waste."))
+
+PATHWAY_B_FEED_PARAMS = {
+    "food_waste": _FW_FEED,
+    "ofmsw": dict(_FW_FEED, source="= food_waste. " + _FW_FEED["source"]),
+    "dairy_manure": dict(
+        fD=0.47, fD_range=(0.40, 0.55),
+        f_sol=0.03, f_sol_range=None,
+        k_hyd=0.15, k_hyd_range=(0.08, 0.21),
+        source=("fD: midpoint of Fisgativa et al. 2020 (cattle manure 0.40) and "
+                "Labatut, Angenent & Scott 2022, Environ. Sci.: Water Res. Technol. "
+                "8:1507, ESI Table S7 (0.48 / 0.88 = 0.55). f_sol: Fisgativa 2020 "
+                "Table 3. k_hyd: midpoint of Fisgativa 2020 (0.08) and Labatut 2022 "
+                "ESI Table S8 (0.21).")),
+    "wheat_straw": dict(
+        fD=0.74, fD_range=(0.54, 0.78),
+        f_sol=0.17, f_sol_range=None,
+        k_hyd=0.08, k_hyd_range=(0.06, 0.10),
+        source=("fD: Labatut 2022 ESI Table S7 (0.65 / 0.88 = 0.74); lower bound "
+                "Jimenez et al. 2020, Waste Manag. 101:150, Table 1 (0.54). f_sol: "
+                "INL reference wheat straw (Hoover, INL, 2016), water-soluble "
+                "organics 8.43 % of DM = 9.3 % of OM, / fD 0.54, all assumed "
+                "digestible. k_hyd: Zerback et al. 2022, Processes 10:1048 (range "
+                "assumed).")),
+    "sewage_sludge": dict(
+        fD=0.62, fD_range=(0.58, 0.67),
+        f_sol=0.21, f_sol_range=(0.03, 0.40),
+        k_hyd=0.36, k_hyd_range=(0.27, 0.44),
+        source=("Raw sewage sludge. fD: midpoint of Fisgativa 2020 (secondary "
+                "0.58) and Sotemann et al. 2005, Water SA 31(4) (primary 0.67). "
+                "f_sol: midpoint of Fisgativa 2020 primary (0.03) and secondary "
+                "(0.40). k_hyd: midpoint of Fisgativa 2020 secondary (0.27) and "
+                "primary (0.44). All depend on the primary/secondary mix.")),
+}
+
+# Behaviour when no feedstock is given (Paper 1 inputs, Pathway A unchanged)
+LEGACY_FEED_PARAMS = dict(X_I=0.08, S_I=0.02, f_sol=0.27, k_hyd=10.0)
+
+
+def pathway_b_feed_params(feedstock_name, overrides=None):
+    """fD, f_sol, k_hyd of a Pathway B feedstock (PATHWAY_B_FEED_PARAMS),
+    with optional overrides for sweeps, e.g. {"fD": 0.80}."""
+    if feedstock_name not in PATHWAY_B_FEED_PARAMS:
+        raise ValueError(f"[ADM1 feed] no degradability data for {feedstock_name!r}; "
+                         f"known: {sorted(PATHWAY_B_FEED_PARAMS)}")
+    p = dict(PATHWAY_B_FEED_PARAMS[feedstock_name])
+    for k, v in (overrides or {}).items():
+        if k not in ("fD", "f_sol", "k_hyd"):
+            raise ValueError(f"[ADM1 feed] unknown override {k!r}")
+        p[k] = float(v)
+    if not (0.0 < p["fD"] <= 1.0 and 0.0 <= p["f_sol"] <= 1.0 and p["k_hyd"] > 0.0):
+        raise ValueError(f"[ADM1 feed] invalid fD={p['fD']}, f_sol={p['f_sol']}, k_hyd={p['k_hyd']}")
+    return p
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ELEMENTAL COMPOSITION -> ADM1 INPUT FRACTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
                            substrate_type="feedstock",
-                           T_HTC=180.0):
+                           T_HTC=180.0, feed_params=None):
     """
     COD fractions of the ADM1 input state variables from the elemental
     composition (kg) of the substrate.
@@ -240,9 +318,11 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
     substrate_type="htc_pw" (Pathway A): S_I = 0.25 + 0.10 (T_HTC - 180)/60,
         bounded to [0.25, 0.50]; no particulate inerts; 75 % of the
         biodegradable COD soluble, of which 5 % as VFA.
-    substrate_type="feedstock" (Pathway B): S_I = 0.02 and X_I = 0.08
-        (Gallipoli et al., 2024); 27 % of the biodegradable COD soluble
-        (Graunke and Wilkie, 2014).
+    substrate_type="feedstock" (Pathway B): with feed_params
+        (pathway_b_feed_params), X_I = 1 - fD, S_I = 0 and a share f_sol of
+        the biodegradable COD soluble. Without feed_params (legacy): S_I =
+        0.02 and X_I = 0.08 (Gallipoli et al., 2024); 27 % of the
+        biodegradable COD soluble (Graunke and Wilkie, 2014).
     Protein from N (16 % N in protein) and lipids from the O/C ratio; the
     rest is carbohydrate. Returns fractions summing to 1.
     """
@@ -250,7 +330,13 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
     if m_org <= 0:
         raise ValueError("derive_adm1_fractions: all elemental masses are zero.")
 
-    X_I_frac = 0.0 if substrate_type == "htc_pw" else 0.08
+    use_feed = substrate_type != "htc_pw" and feed_params is not None
+    if substrate_type == "htc_pw":
+        X_I_frac = 0.0
+    elif use_feed:
+        X_I_frac = 1.0 - float(feed_params["fD"])
+    else:
+        X_I_frac = LEGACY_FEED_PARAMS["X_I"]
 
     if substrate_type == "htc_pw":
         OC_mol   = (O / MW_O) / max(C / MW_C, 1e-9)
@@ -260,8 +346,10 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
         print(f"[S_I_frac | htc_pw] OC={OC_mol:.3f}  NC={NC_mol:.3f}  "
               f"T={T_HTC}°C  →  S_I_frac={S_I_frac:.3f}  "
               f"predicted BMP={(1-S_I_frac)*350:.0f} mL/g COD")
+    elif use_feed:
+        S_I_frac = 0.0
     else:
-        S_I_frac = 0.02
+        S_I_frac = LEGACY_FEED_PARAMS["S_I"]
 
     biodeg_frac = 1.0 - S_I_frac - X_I_frac
 
@@ -311,7 +399,7 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
         bio_total = protein_frac + lipid_frac + carb_frac
         protein_frac /= bio_total; lipid_frac /= bio_total; carb_frac /= bio_total
 
-        sol_frac    = 0.27
+        sol_frac    = float(feed_params["f_sol"]) if use_feed else LEGACY_FEED_PARAMS["f_sol"]
         part_frac   = 1.0 - sol_frac
         sol_biodeg  = sol_frac  * biodeg_frac
         part_biodeg = part_frac * biodeg_frac
@@ -1130,7 +1218,15 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
                                   pH_target=7.2,
                                   TS_target=0.08,
                                   slurry_density=1.02,
-                                  T_op=308.15):
+                                  T_op=308.15,
+                                  feedstock_name=None,
+                                  feed_overrides=None):
+    """Raw feedstock -> ADM1 influent (Pathway B). feedstock_name selects the
+    degradability data of PATHWAY_B_FEED_PARAMS (fD, f_sol, k_hyd;
+    feed_overrides replaces any of them); None keeps the legacy inputs
+    (LEGACY_FEED_PARAMS)."""
+    feed_params = (pathway_b_feed_params(feedstock_name, feed_overrides)
+                   if feedstock_name is not None else None)
     m_org     = C_feed + H_feed + O_feed + N_feed + S_feed
     m_dry     = m_org + ash_kg
     total_COD = compute_thod(C_feed, H_feed, O_feed, N_feed, S_feed)
@@ -1163,7 +1259,8 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     S_IC = compute_S_IC(pH=8, T_op_K=T_op, p_CO2_atm=0.0005)
 
     fractions = derive_adm1_fractions(C_feed, H_feed, O_feed, N_feed, S_feed,
-                                       ash_kg=ash_kg, substrate_type="feedstock")
+                                       ash_kg=ash_kg, substrate_type="feedstock",
+                                       feed_params=feed_params)
     _print_fractions(fractions, "feedstock", C_feed, H_feed, O_feed, N_feed, S_feed)
 
     S_cation, S_anion = compute_charge_pair(
@@ -1188,6 +1285,11 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     d["_m_dry_kg"]          = m_dry
     d["_m_org_kg"]          = m_org
     d["_pw_mode"]           = False   # Pathway B: standard ADM1
+    d["_feedstock_name"]    = feedstock_name
+    if feed_params is not None:
+        d["_k_hyd"]  = feed_params["k_hyd"]    # read by run_adm1
+        d["_fD"]     = feed_params["fD"]
+        d["_f_sol"]  = feed_params["f_sol"]
 
     print(f"[translate_feedstock] mode={mode}  COD_conc={COD_conc_inf:.3f} kgCOD/m³")
     if mode == "continuous" and HRT_days:
@@ -1286,6 +1388,10 @@ def run_adm1(substrate,
         raise ValueError(f"mode must be 'batch' or 'continuous', got '{mode}'")
 
     c = _build_constants(T_op)
+    if substrate.get("_k_hyd") is not None:
+        # feedstock-specific hydrolysis of X_ch, X_pr, X_li (Pathway B)
+        c["k_hyd_ch"] = c["k_hyd_pr"] = c["k_hyd_li"] = float(substrate["_k_hyd"])
+        print(f"[run_adm1] k_hyd = {c['k_hyd_ch']} d-1 ({substrate.get('_feedstock_name')})")
     if K_I_nh3_override is not None:
         c["K_I_nh3"] = float(K_I_nh3_override)
         print(f"[run_adm1] K_I_nh3 overridden to {c['K_I_nh3']:.4f} kmolN/m³")
