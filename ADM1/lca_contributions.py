@@ -15,7 +15,8 @@ CATS = ["HTC and drying (electricity)", "Digester heat (natural gas)",
         "Direct emissions (HTC off-gas, digestion, upgrading)",
         "Hydrochar combustion and ash disposal",
         "Other (AD and dewatering electricity, PSA)",
-        "Credit: industrial heat mix", "Credit: natural gas heat"]
+        "Credit: industrial heat mix", "Credit: natural gas heat",
+        "HTC and drying (fuel heat)"]
 
 _unit_score, _cf = {}, {}
 
@@ -79,6 +80,8 @@ def category(parent_code, exc):
         return CATS[2]
     if parent_code in ("htc_reactor", "hydrochar_drying") and "electricity" in name:
         return CATS[0]
+    if parent_code in ("htc_reactor", "hydrochar_drying") and "heat" in name:
+        return CATS[8]
     if parent_code == "anaerobic_digestion" and "heat" in name:
         return CATS[1]
     return CATS[5]

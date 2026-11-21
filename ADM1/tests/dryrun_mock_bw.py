@@ -113,6 +113,12 @@ if PORTED:
     mix = fg("qc_heat_mix", "megajoule")
     comps = {g: [(tech(f"{g} heat dataset", "megajoule"), 1.0)] for g in sb.hce.QC_HEAT_MIX}
     kw.update(feedstock_name="food_waste", qc_heat_mix=mix, heat_mix_components_qc=comps)
+# optional heat supply, e.g. HADES_HEAT_SUPPLY="htc=own_biogas,dryer=ng,ad=own_biogas"
+# (values: electricity, own_biogas, ng = the natural gas heat dataset above)
+_hs = os.environ.get("HADES_HEAT_SUPPLY")
+if _hs:
+    _map = {"electricity": "electricity", "own_biogas": "own_biogas", "ng": kw["ad_heat"]}
+    kw["heat_supply"] = {k: _map[v] for k, v in (x.split("=") for x in _hs.split(","))}
 ctx = sb.SystemContext(**kw)
 
 ml_file = sys.argv[5] if len(sys.argv) > 5 else "htc_surrogate.py"

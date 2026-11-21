@@ -224,6 +224,12 @@ class SystemContext:
     # Pathway A: multiplier on the process-water digester methane (and CO2),
     # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE
     pw_ch4_multiplier: float = 1.0
+    # Heat supply of the three heat consumers (see HEAT_SUPPLY_DOC):
+    # {"htc": ..., "dryer": ..., "ad": ...}, each "electricity", "own_biogas"
+    # or a Brightway activity delivering heat in MJ. None or a missing key:
+    # Paper 1 (HTC electric, dryer ctx.drying_heat, digester ctx.ad_heat).
+    heat_supply: Optional[dict] = None
+    heat_backup: Any = None              # MJ heat activity for an own-biogas shortfall (None -> ctx.ad_heat)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -366,6 +372,94 @@ def apply_pw_ch4_multiplier(CH4_kg, CO2_kg, COD_fed_kg, m):
         ch4 = ch4_max
     m_eff = ch4 / CH4_kg if CH4_kg > 0 else 0.0
     return ch4, CO2_kg * m_eff, m_eff
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HEAT SUPPLY OF THE HTC REACTOR, THE DRYER AND THE DIGESTER
+# Heat demands are delivered heat (MJ):
+#   HTC    Q_HTC_net / (1 - F_LOSS_HTC)  (heat_integration.htc_duty)
+#   dryer  Q_dry_util                    (heat_integration.dryer_duty)
+#   AD     Q_AD_util                     (heat_integration.ad_duty)
+# A source is
+#   an electricity activity (kWh): HTC Q / ETA_HTC_UTILITY / 3.6 (Paper 1),
+#       dryer and digester Q / 3.6;
+#   a heat activity (MJ, ecoinvent delivered heat, boiler efficiency inside):
+#       Q MJ;
+#   "own_biogas": raw biogas diverted before upgrading and burned on site,
+#       written as Q MJ of the foreground heat_biomethane activity
+#       (combustion emissions). One MJ of methane (LHV) gives
+#       OWN_BIOGAS_HEAT_PER_MJ_CH4 MJ of heat; 1.0 keeps the convention of the
+#       exported biomethane (1 MJ biomethane = 1 MJ heat displaced). Biogas
+#       is allocated to the digester first, then the HTC, then the dryer; a
+#       shortfall comes from ctx.heat_backup (default ctx.ad_heat).
+# The diverted methane is not upgraded: the PSA and the exported biomethane
+# shrink accordingly.
+# ─────────────────────────────────────────────────────────────────────────────
+HEAT_CONSUMERS = ("ad", "htc", "dryer")          # own-biogas allocation order
+OWN_BIOGAS_HEAT_PER_MJ_CH4 = 1.0
+
+
+def _is_kwh(act):
+    return act.get("unit", "") == "kilowatt hour"
+
+
+def resolve_heat_sources(ctx):
+    """{consumer: "own_biogas" or activity} with the Paper 1 defaults."""
+    hs = dict(ctx.heat_supply or {})
+    unknown = set(hs) - set(HEAT_CONSUMERS)
+    if unknown:
+        raise ValueError(f"[heat supply] unknown consumer(s) {sorted(unknown)}; use {HEAT_CONSUMERS}")
+    default = {"htc": ctx.elec, "dryer": ctx.drying_heat, "ad": ctx.ad_heat}
+    out = {}
+    for c in HEAT_CONSUMERS:
+        v = hs.get(c, default[c])
+        if v == "electricity":
+            v = ctx.elec
+        if v != "own_biogas":
+            if v is None or v.get("unit", "") not in ("kilowatt hour", "megajoule"):
+                raise ValueError(f"[heat supply] {c}: source must be 'electricity', 'own_biogas' "
+                                 f"or an activity in kWh or MJ, got {v!r}")
+        out[c] = v
+    return out
+
+
+def _supply_amount(act, Q_MJ, consumer):
+    """(activity, amount, unit) delivering Q_MJ of heat from `act`."""
+    if _is_kwh(act):
+        eta = hi.ETA_HTC_UTILITY if consumer == "htc" else 1.0
+        return (act, Q_MJ / eta / 3.6, "kilowatt hour")
+    return (act, Q_MJ, "megajoule")
+
+
+def plan_heat_supply(sources, demands_MJ, CH4_MJ_avail, heat_biogas_act, backup_act):
+    """
+    Exchanges supplying each heat demand.
+    sources: resolve_heat_sources(); demands_MJ: {consumer: MJ};
+    CH4_MJ_avail: methane LHV energy leaving the digester (MJ).
+    Returns ({consumer: [(activity, amount, unit), ...]}, CH4_MJ_diverted,
+    {consumer: shortfall MJ}).
+    """
+    plan, short = {}, {}
+    left = max(0.0, float(CH4_MJ_avail)) * OWN_BIOGAS_HEAT_PER_MJ_CH4
+    for c in HEAT_CONSUMERS:
+        Q = max(0.0, float(demands_MJ.get(c, 0.0)))
+        src = sources[c]
+        if src != "own_biogas":
+            plan[c] = [_supply_amount(src, Q, c)] if Q > 0 else []
+            continue
+        own = min(Q, left)
+        left -= own
+        plan[c] = [(heat_biogas_act, own, "megajoule")] if own > 0 else []
+        if Q - own > 1e-12:
+            short[c] = Q - own
+            plan[c].append(_supply_amount(backup_act, Q - own, c))
+    used = max(0.0, float(CH4_MJ_avail)) * OWN_BIOGAS_HEAT_PER_MJ_CH4 - left
+    return plan, used / OWN_BIOGAS_HEAT_PER_MJ_CH4, short
+
+
+def _write_heat(act, supply):
+    for a, amount, unit in supply:
+        act.new_exchange(input=a, amount=amount, type="technosphere", unit=unit).save()
 
 
 def get_or_create(db, code, name, unit, location="CA-QC", type_="process"):
@@ -619,9 +713,13 @@ def build_htc_reactor_exchanges(htc_reactor, elec, tap_water, co2_air, co_air,
                                  wastewater_treat, Q_heat_kWh, CO2_yield, CO_yield,
                                  added_water, PW_yield, PATHWAY,
                                  ad_process=None, digestate_mass=None,
-                                 dewatering_activity=None, m_digestate_for_htc=None):
-    htc_reactor.new_exchange(input=elec, amount=Q_heat_kWh,
-                              type="technosphere", unit="kilowatt hour").save()
+                                 dewatering_activity=None, m_digestate_for_htc=None,
+                                 heat_supply=None):
+    if heat_supply is None:
+        htc_reactor.new_exchange(input=elec, amount=Q_heat_kWh,
+                                  type="technosphere", unit="kilowatt hour").save()
+    else:
+        _write_heat(htc_reactor, heat_supply)
     htc_reactor.new_exchange(input=co2_air, amount=CO2_yield,
                               type="biosphere", unit="kilogram").save()
     htc_reactor.new_exchange(input=co_air, amount=CO_yield,
@@ -643,7 +741,7 @@ def build_htc_reactor_exchanges(htc_reactor, elec, tap_water, co2_air, co_air,
 
 
 def build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3,
-                           fan_kWh=0.0):
+                           fan_kWh=0.0, heat_supply=None):
     """
     elec_MJ: dryer heat supplied by the utility (MJ), from hi.dryer_duty().
     If drying_heat is an electricity market (kWh), the heat is direct
@@ -652,7 +750,9 @@ def build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ,
     dryer.
     """
     is_kwh = drying_heat.get("unit", "") == "kilowatt hour"
-    if elec_MJ > 0:
+    if heat_supply is not None:
+        _write_heat(drying, heat_supply)
+    elif elec_MJ > 0:
         drying.new_exchange(input=drying_heat, amount=elec_MJ / 3.6 if is_kwh else elec_MJ,
                              type="technosphere", unit="kilowatt hour" if is_kwh else "megajoule").save()
     if fan_kWh > 0:
@@ -668,7 +768,7 @@ def build_ad_exchanges(ad_process, bios, ei, CH4_mass, NH3_mass, m_AD_in,
                         adm1_mode, PATHWAY, ad_elec, ad_heat,
                         wastewater_treat=None, digestate_mass=None,
                         dilution_water_m3=0.0, tap_water=None,
-                        T_AD_in_C=None, Q_rec_avail_MJ=0.0):
+                        T_AD_in_C=None, Q_rec_avail_MJ=0.0, heat_supply=None):
     f_fug_CH4 = 0.02          # 2 % of CH4 produced, threshold of Liebetrau et al. (2017)
     f_fug_NH3 = 0.05          # 5 % of gaseous NH3, model default (assumption)
     CH4_fug = CH4_mass * f_fug_CH4
@@ -691,7 +791,10 @@ def build_ad_exchanges(ad_process, bios, ei, CH4_mass, NH3_mass, m_AD_in,
     E_elec_AD_kWh = m_AD_in * e_elec_AD
 
     ad_process.new_exchange(input=ad_elec, amount=E_elec_AD_kWh, type="technosphere", unit="kilowatt hour").save()
-    ad_process.new_exchange(input=ad_heat, amount=Q_heat_AD_MJ, type="technosphere", unit="megajoule").save()
+    if heat_supply is None:
+        ad_process.new_exchange(input=ad_heat, amount=Q_heat_AD_MJ, type="technosphere", unit="megajoule").save()
+    else:
+        _write_heat(ad_process, heat_supply)
 
     if dilution_water_m3 > 0 and tap_water is not None:
         ad_process.new_exchange(input=tap_water, amount=dilution_water_m3 * 1000,
@@ -1666,20 +1769,6 @@ def build_system(ctx: SystemContext,
     LHV_biomethane = 35.8
     LHV_NG = 35.8
 
-    CH4_m3 = CH4_mass / CH4_density
-    biomethane_m3 = CH4_m3 * PSA_CH4_recovery
-    biogas_m3 = (CH4_mass / CH4_density) + (CO2_mass / CO2_density)
-
-    MJ_biomethane = biomethane_m3 * LHV_biomethane
-    scaling_factor = MJ_biomethane / LHV_NG
-
-    print(f"Biogas: {biogas_m3:.4f} m³ → biomethane: {biomethane_m3:.4f} m³")
-    print(f"Biomethane energy: {MJ_biomethane:.4f} MJ → NG displaced: {scaling_factor:.4f} m³NG")
-
-    # =========================================================
-    # STEP 7 — WRITE LCA EXCHANGES
-    # =========================================================
-
     # Digester inlet temperature and recovered heat.
     # Pathway A: process water after E2 and the letdown (<= T_SEP_C), mixed
     # with dilution water at T_amb; E2 heat preheats the dilution water.
@@ -1697,6 +1786,36 @@ def build_system(ctx: SystemContext,
         _T_AD_in_C = hi.T_AMB_C
         _Q_rec_AD_MJ = hi.residual_heat_to_ad_MJ(m_feedstock_effective, _T_prod2_C)
 
+    CH4_m3 = CH4_mass / CH4_density
+
+    # heat supply (HEAT_CONSUMERS): None keeps the Paper 1 exchanges exactly;
+    # otherwise heat demands are planned, and biogas burned on site is
+    # diverted before the PSA
+    _heat_plan, _CH4_div_MJ, _heat_short, _heat_dem, _heat_src = None, 0.0, {}, {}, {}
+    if ctx.heat_supply is not None:
+        _heat_src = resolve_heat_sources(ctx)
+        _heat_dem = {"htc": Q_heat_kWh * 3.6 * hi.ETA_HTC_UTILITY,
+                     "dryer": elec_MJ,
+                     "ad": hi.ad_duty(m_AD_in, T_in_C=_T_AD_in_C,
+                                      Q_rec_avail_MJ=_Q_rec_AD_MJ)["Q_AD_util_MJ"]}
+        _heat_plan, _CH4_div_MJ, _heat_short = plan_heat_supply(
+            _heat_src, _heat_dem, CH4_m3 * LHV_biomethane, heat_biomethane,
+            ctx.heat_backup if ctx.heat_backup is not None else ad_heat)
+        print(f"[heat supply] demands MJ {({k: round(v, 2) for k, v in _heat_dem.items()})}  "
+              f"own biogas used {_CH4_div_MJ:.2f} MJ CH4  shortfall {_heat_short}")
+    biomethane_m3 = max(0.0, CH4_m3 - _CH4_div_MJ / LHV_biomethane) * PSA_CH4_recovery
+    biogas_m3 = (CH4_mass / CH4_density) + (CO2_mass / CO2_density)
+
+    MJ_biomethane = biomethane_m3 * LHV_biomethane
+    scaling_factor = MJ_biomethane / LHV_NG
+
+    print(f"Biogas: {biogas_m3:.4f} m³ → biomethane: {biomethane_m3:.4f} m³")
+    print(f"Biomethane energy: {MJ_biomethane:.4f} MJ → NG displaced: {scaling_factor:.4f} m³NG")
+
+    # =========================================================
+    # STEP 7 — WRITE LCA EXCHANGES
+    # =========================================================
+
     CH4_fug, NH3_fug, Q_heat_AD_MJ, E_elec_AD_kWh, ad_hi = build_ad_exchanges(
         ad_process=ad_process, bios=bios, ei=ei,
         CH4_mass=CH4_mass, NH3_mass=NH3_mass, m_AD_in=m_AD_in,
@@ -1708,6 +1827,7 @@ def build_system(ctx: SystemContext,
                             else feed_inputs.get("_dilution_water_kg", 0.0) / 1000.0),
         tap_water=tap_water,
         T_AD_in_C=_T_AD_in_C, Q_rec_avail_MJ=_Q_rec_AD_MJ,
+        heat_supply=_heat_plan["ad"] if _heat_plan else None,
     )
 
     if PATHWAY == "B":
@@ -1726,10 +1846,12 @@ def build_system(ctx: SystemContext,
         digestate_mass=digestate_mass if PATHWAY == "A" else None,
         dewatering_activity=dewatering if PATHWAY == "B" else None,
         m_digestate_for_htc=m_digestate_for_htc if PATHWAY == "B" else None,
+        heat_supply=_heat_plan["htc"] if _heat_plan else None,
     )
 
     build_drying_exchanges(drying, elec, drying_heat, wastewater_treat, elec_MJ, wastewater_m3,
-                           fan_kWh=dryer_fan_kWh)
+                           fan_kWh=dryer_fan_kWh,
+                           heat_supply=_heat_plan["dryer"] if _heat_plan else None)
     # hydrochar heat displaces the Quebec industrial combustion heat mix;
     # emissions capped at the emission limit values (Directive (EU) 2015/2193)
     build_hydrochar_enduse_exchanges(ctx, q_enduse, bios)
@@ -1883,6 +2005,14 @@ def build_system(ctx: SystemContext,
     waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""
     waste_treatment["pw_ch4_multiplier"] = float(ctx.pw_ch4_multiplier) if PATHWAY == "A" else None
     waste_treatment["pw_ch4_multiplier_effective"] = float(_m_eff_A) if PATHWAY == "A" else None
+    # heat supply of this run
+    _src_name = lambda v: v if isinstance(v, str) else f"{v.get('name')} [{v.get('location')}]"
+    waste_treatment["heat_supply"] = ("paper1_default" if ctx.heat_supply is None else
+                                      "; ".join(f"{c}={_src_name(v)}" for c, v in _heat_src.items()))
+    for _c in HEAT_CONSUMERS:
+        waste_treatment[f"heat_demand_{_c}_MJ"] = float(_heat_dem[_c]) if _heat_dem else None
+        waste_treatment[f"heat_shortfall_{_c}_MJ"] = float(_heat_short.get(_c, 0.0))
+    waste_treatment["CH4_own_use_MJ"] = float(_CH4_div_MJ)
     waste_treatment["pw_COD_fed_kg"] = float(_COD_fed_A) if PATHWAY == "A" else None
     if PATHWAY == "B":
         for _k in ("_NH4_N_kg", "_dg_VS_destroyed", "_dg_f_NH4", "_dg_warnings",
