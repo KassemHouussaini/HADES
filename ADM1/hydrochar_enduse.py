@@ -80,7 +80,51 @@ HEAT_MIX_DATASETS = {
     "coal_coke":   [("heat production, at hard coal industrial furnace 1-10MW", _H_OTHER, 0.155),
                     ("heat production, at coal coke industrial furnace 1-10MW", _H_OTHER, 0.0670)],
     "lng":         [("market for heat, district or industrial, natural gas", _H_NG, 1.0)],
+    # Paper 2 regional mixes: LPG and gas-plant NGL -> propane furnace
+    "lpg_ngl":     [("heat production, propane, at industrial furnace >100kW", _H_OTHER, 1.0)],
 }
+
+
+# Paper 2: regional industrial combustion heat mixes, 2023, from Natural
+# Resources Canada, Comprehensive Energy Use Database (OEE, 2025), industrial
+# sector Table 1. Electricity and "Other" (steam, cement waste fuels) are
+# excluded and the remaining fuels renormalized. "petroleum" includes still
+# gas and petroleum coke. "lpg_ngl" is LPG and gas-plant natural gas liquids
+# (not liquefied natural gas) and is mapped to the propane furnace. NRCan
+# publishes the four Atlantic provinces as one group and BC together with the
+# Territories, so those provinces take their group's mix. The values are the
+# rounded percentages of the NRCan tables (sums 0.999 to 1.001; the builder
+# renormalizes). QC_HEAT_MIX above stays the Paper 1 default.
+REGIONAL_HEAT_MIX_SOURCE = ("NRCan Comprehensive Energy Use Database (OEE, 2025), "
+                            "industrial sector Table 1, 2023")
+REGIONAL_HEAT_MIX = {
+    #              natural_gas bioenergy petroleum coal_coke lpg_ngl   combustion fuels, PJ
+    "QC":     dict(natural_gas=0.489, bioenergy=0.245, petroleum=0.218, coal_coke=0.039, lpg_ngl=0.009),  # 335
+    "ON":     dict(natural_gas=0.513, bioenergy=0.061, petroleum=0.232, coal_coke=0.178, lpg_ngl=0.016),  # 544
+    "MB":     dict(natural_gas=0.658, bioenergy=0.153, petroleum=0.138, coal_coke=0.007, lpg_ngl=0.044),  # 41
+    "SK":     dict(natural_gas=0.816, bioenergy=0.011, petroleum=0.159, coal_coke=0.000, lpg_ngl=0.014),  # 213
+    "AB":     dict(natural_gas=0.695, bioenergy=0.033, petroleum=0.240, coal_coke=0.000, lpg_ngl=0.033),  # 1437
+    "BC_TER": dict(natural_gas=0.358, bioenergy=0.396, petroleum=0.224, coal_coke=0.014, lpg_ngl=0.008),  # 271
+    "ATL":    dict(natural_gas=0.153, bioenergy=0.346, petroleum=0.447, coal_coke=0.031, lpg_ngl=0.023),  # 112
+    "CA":     dict(natural_gas=0.595, bioenergy=0.107, petroleum=0.235, coal_coke=0.040, lpg_ngl=0.023),  # 2952
+}
+# provinces and territories -> NRCan region
+PROVINCE_TO_HEAT_MIX_REGION = {
+    "QC": "QC", "ON": "ON", "MB": "MB", "SK": "SK", "AB": "AB",
+    "BC": "BC_TER", "YT": "BC_TER", "NT": "BC_TER", "NU": "BC_TER",
+    "NB": "ATL", "NS": "ATL", "PE": "ATL", "NL": "ATL",
+}
+
+
+def regional_heat_mix(province):
+    """Shares of the 2023 industrial combustion heat mix for a province or
+    territory code (e.g. "QC", "BC") or an NRCan region key (e.g. "ATL", "CA")."""
+    key = str(province).upper().replace("CA-", "")
+    region = PROVINCE_TO_HEAT_MIX_REGION.get(key, key)
+    if region not in REGIONAL_HEAT_MIX:
+        raise KeyError(f"no industrial heat mix for '{province}'; "
+                       f"known: {sorted(set(PROVINCE_TO_HEAT_MIX_REGION) | set(REGIONAL_HEAT_MIX))}")
+    return dict(REGIONAL_HEAT_MIX[region])
 
 
 # =============================================================================

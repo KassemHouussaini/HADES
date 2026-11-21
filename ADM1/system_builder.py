@@ -220,6 +220,12 @@ class SystemContext:
     nox_conv: float = 0.10               # fuel N -> NOx, hydrochar boiler (hce.NOX_CONV_CENTRAL)
     qc_heat_mix: Any = None              # foreground activity: Quebec industrial combustion heat mix
     heat_mix_components_qc: Any = None   # bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, ...)
+    # shares of the displaced heat mix: None -> hce.QC_HEAT_MIX (Paper 1);
+    # a dict of group shares, or a province/region code such as "QC", "ON",
+    # "ATL" -> hce.regional_heat_mix (NRCan 2023). heat_mix_components_qc
+    # must then be resolved for these groups (and, outside Quebec, with a
+    # matching location priority).
+    heat_mix_shares: Any = None
     ash_disposal: Any = None             # ash treatment of the boiler ash (None -> omitted, printed)
     # Pathway A: multiplier on the process-water digester methane (and CO2),
     # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE
@@ -951,6 +957,20 @@ def build_hydrochar_combustion_exchanges(hc_heat, coal_heat, bios, SO2_per_MJ,
           f"flows -> '{so2_flow['name']}' {tuple(so2_flow['categories'])}")
 
 
+def resolve_heat_mix_shares(spec):
+    """None -> hce.QC_HEAT_MIX (Paper 1); str -> hce.regional_heat_mix(spec);
+    dict -> itself (checked for unknown groups)."""
+    if spec is None:
+        return hce.QC_HEAT_MIX
+    if isinstance(spec, str):
+        return hce.regional_heat_mix(spec)
+    shares = dict(spec)
+    unknown = [k for k in shares if k not in hce.HEAT_MIX_DATASETS]
+    if unknown:
+        raise ValueError(f"heat_mix_shares: unknown groups {unknown}; known {sorted(hce.HEAT_MIX_DATASETS)}")
+    return shares
+
+
 def build_heat_mix_exchanges(mix_act, components, shares):
     """
     1 MJ of an industrial combustion heat mix =
@@ -1019,7 +1039,8 @@ def build_hydrochar_enduse_exchanges(ctx, q, bios):
         for exc in list(act.exchanges()):
             if exc["type"] != "production":
                 exc.delete()
-    build_heat_mix_exchanges(ctx.qc_heat_mix, ctx.heat_mix_components_qc, hce.QC_HEAT_MIX)
+    build_heat_mix_exchanges(ctx.qc_heat_mix, ctx.heat_mix_components_qc,
+                             resolve_heat_mix_shares(ctx.heat_mix_shares))
     build_hydrochar_combustion_exchanges(
         ctx.heat_prod, ctx.coal_heat, bios, q["SO2_per_MJ"], q["NOx_per_MJ"],
         q["CO2_bio_per_MJ"], q["Ash_char_pct"], locations=CORE_FLOW_LOCATIONS,
