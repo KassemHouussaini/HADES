@@ -68,6 +68,53 @@ RHO_CH4 = 0.716
 RHO_CO2 = 1.977
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CAP RECORDER
+# Several empirical correlations are bounded (np.clip, min, max). When a bound
+# binds, the bound replaces the computed value. bound() applies the bound
+# exactly as before AND records it, so that every run can report which caps
+# were active (system_builder writes them to caps_active and qa_flags).
+# kind "correlation": a bound on an empirical correlation (result changed);
+# kind "design": a deliberate design or regulatory limit.
+# Physical and numerical guards (max(0, dT), division by zero, non-negative
+# ODE states) are not recorded.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CAPS = {}
+
+
+def reset_caps():
+    """Forget the caps recorded so far (called at the start of build_system)."""
+    _CAPS.clear()
+
+
+def record_cap(name, raw, used, kind="correlation"):
+    """Record that `used` replaced `raw` for `name`; repeated hits are counted
+    and the first raw value is kept."""
+    if name in _CAPS:
+        _CAPS[name]["n"] += 1
+    else:
+        _CAPS[name] = dict(raw=float(raw), used=float(used), kind=kind, n=1)
+
+
+def caps_report():
+    """{name: {raw, used, kind, n}} of the caps that bound since reset_caps()."""
+    return {k: dict(v) for k, v in _CAPS.items()}
+
+
+def bound(name, x, lo=None, hi=None, kind="correlation"):
+    """float(np.clip(x, lo, hi)) with a record when a bound binds."""
+    x = float(x)
+    y = x
+    if lo is not None and y < lo:
+        y = float(lo)
+    if hi is not None and y > hi:
+        y = float(hi)
+    if y != x:
+        record_cap(name, x, y, kind)
+    return y
+
+
 def compute_thod(C, H, O, N, S):
     thod = 32.0 * (C / MW_C
                    + H / (4.0 * MW_H)
@@ -83,12 +130,17 @@ def compute_S_IN(N_kg, V_m3, substrate_type="feedstock",
         R0    = RT_HTC * math.exp((T_HTC - 100.0) / 14.75)
         logR0 = math.log10(max(R0, 1e-9))
         f_IN  = 0.30 + 0.35 / (1.0 + math.exp(-1.5 * (logR0 - 3.8)))
-        f_IN  = float(np.clip(f_IN, 0.30, 0.65))
+        f_IN  = bound("f_IN (htc_pw) in [0.30, 0.65]", f_IN, 0.30, 0.65)
     elif substrate_type == "digestate":
         f_IN  = 0.70
     else:
         f_IN  = 0
-    S_IN = max(float(np.clip((N_kg * f_IN) / max(V_m3, 1e-9) / MW_N, 0.0, 0.13)), 1e-4)
+    S_IN = bound(f"S_IN ({substrate_type}) <= 0.13 kmol N/m3",
+                 (N_kg * f_IN) / max(V_m3, 1e-9) / MW_N, 0.0, 0.13)
+    # floor 1e-4: for a raw feedstock (f_IN = 0, all N organic) the floor is
+    # the design value, not a cap
+    S_IN = (bound(f"S_IN ({substrate_type}) >= 1e-4 kmol N/m3", S_IN, 1e-4) if f_IN > 0
+            else max(S_IN, 1e-4))
     print(f"[compute_S_IN | {substrate_type}] N_kg={N_kg:.4f}  "
           f"f_IN={f_IN:.3f}  S_IN={S_IN:.5f} kmolN/m³")
     return S_IN, f_IN
@@ -103,7 +155,7 @@ def compute_S_IC(pH=7.2, T_op_K=308.15, p_CO2_atm=0.0005):
     h     = 10**(-pH)
     CO2_aq = KH * p_CO2_atm
     S_IC   = CO2_aq * (1.0 + Ka1/h + Ka1*Ka2/h**2)
-    S_IC   = float(np.clip(S_IC, 0.01, 0.20))
+    S_IC   = bound("S_IC (feedstock) in [0.01, 0.20] kmol C/m3", S_IC, 0.01, 0.20)
     print(f"[compute_S_IC] pH={pH:.2f}  T={T_op_K-273.15:.1f}°C  "
           f"p_CO2={p_CO2_atm:.4f} atm  S_IC={S_IC:.5f} kmolC/m³")
     return S_IC
@@ -162,7 +214,7 @@ SI_SLOW_POOLS = ["ketone", "humic"]
 
 def get_si_composition(T_HTC):
     """Sub-pool fractions of S_I at T_HTC (linear interpolation, sum = 1)."""
-    T = float(np.clip(T_HTC, 160, 280))
+    T = bound("T_HTC for S_I composition in [160, 280] C", T_HTC, 160, 280)
     i = int(np.clip(np.searchsorted(SI_TEMPS, T, side='right') - 1,
                     0, len(SI_TEMPS) - 2))
     t0, t1 = SI_TEMPS[i], SI_TEMPS[i + 1]
@@ -203,7 +255,8 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
     if substrate_type == "htc_pw":
         OC_mol   = (O / MW_O) / max(C / MW_C, 1e-9)
         NC_mol   = (N / MW_N) / max(C / MW_C, 1e-9)
-        S_I_frac = float(np.clip(0.25 + 0.10 * ((T_HTC - 180) / 60), 0.25, 0.50))
+        S_I_frac = bound("S_I fraction (htc_pw) in [0.25, 0.50]",
+                         0.25 + 0.10 * ((T_HTC - 180) / 60), 0.25, 0.50)
         print(f"[S_I_frac | htc_pw] OC={OC_mol:.3f}  NC={NC_mol:.3f}  "
               f"T={T_HTC}°C  →  S_I_frac={S_I_frac:.3f}  "
               f"predicted BMP={(1-S_I_frac)*350:.0f} mL/g COD")
@@ -221,10 +274,10 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
         sol_mono = sol_biodeg * (1.0 - vfa_frac)
 
         OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
-        f_aa = float(np.clip((N / m_org) / 0.16, 0.0, 0.55))
-        f_fa_raw = float(np.clip((1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40))
-        f_fa = min(f_fa_raw, max(0.0, 0.80 - f_aa))
-        f_su = max(1.0 - f_aa - f_fa, 0.05)
+        f_aa = bound("protein fraction (htc_pw) <= 0.55", (N / m_org) / 0.16, 0.0, 0.55)
+        f_fa_raw = bound("lipid fraction (htc_pw) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
+        f_fa = bound("lipid fraction (htc_pw) <= 0.80 - protein", f_fa_raw, hi=max(0.0, 0.80 - f_aa))
+        f_su = bound("carbohydrate fraction (htc_pw) >= 0.05", 1.0 - f_aa - f_fa, lo=0.05)
 
         mono_total = f_aa + f_su + f_fa
         f_aa /= mono_total; f_su /= mono_total; f_fa /= mono_total
@@ -247,11 +300,13 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
             "X_I":   X_I_frac,
         }
     else:
-        protein_frac = float(np.clip((N / m_org) / 0.16, 0.0, 0.55))
+        protein_frac = bound("protein fraction (feedstock) <= 0.55", (N / m_org) / 0.16, 0.0, 0.55)
         OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
-        lipid_raw = float(np.clip((1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40))
-        lipid_frac = min(lipid_raw, max(0.0, 0.80 - protein_frac))
-        carb_frac = max(1.0 - protein_frac - lipid_frac, 0.05)
+        lipid_raw = bound("lipid fraction (feedstock) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
+        lipid_frac = bound("lipid fraction (feedstock) <= 0.80 - protein", lipid_raw,
+                           hi=max(0.0, 0.80 - protein_frac))
+        carb_frac = bound("carbohydrate fraction (feedstock) >= 0.05",
+                          1.0 - protein_frac - lipid_frac, lo=0.05)
 
         bio_total = protein_frac + lipid_frac + carb_frac
         protein_frac /= bio_total; lipid_frac /= bio_total; carb_frac /= bio_total
@@ -327,7 +382,7 @@ def compute_charge_pair(S_IC, S_IN, S_va, S_bu, S_pro, S_ac,
            + S_ac_ion  / COD_ac + S_pro_ion / COD_pro
            + S_bu_ion  / COD_bu + S_va_ion  / COD_va
            + Kw / h - (S_IN - S_nh3) - h)
-    net_capped = float(np.clip(net, -0.20, 0.20))
+    net_capped = bound("charge balance net ions in [-0.20, 0.20] kmol/m3", net, -0.20, 0.20)
     base = 0.04
     S_cation = base + max(net_capped, 0.0)
     S_anion  = base - min(net_capped, 0.0)
@@ -458,6 +513,10 @@ def _dae_solve(sv, c):
         if abs(delta) <= tol:
             break
 
+    # the Newton iterate is held in pH 4-10; a converged value on a bound
+    # means the true pH lies outside and the bound was used
+    if S_H_ion <= 1e-10 or S_H_ion >= 1e-4:
+        record_cap("digester pH in [4, 10] (solver bound)", float("nan"), -np.log10(S_H_ion))
     pH = -np.log10(max(S_H_ion, 1e-14))
     I_pH_aa = (K_pH_aa**nn_aa) / (S_H_ion**nn_aa + K_pH_aa**nn_aa)
     I_pH_h2 = (K_pH_h2**n_h2)  / (S_H_ion**n_h2  + K_pH_h2**n_h2)
@@ -986,7 +1045,7 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
 
     S_IN, f_IN = compute_S_IN(N_pw, V_feed_diluted, "htc_pw", T_HTC, RT_HTC)
     # initial inorganic carbon (kmol C/m3), bounded to 0.08-0.20
-    S_IC = float(np.clip(COD_conc * 0.8 / 61.0, 0.08, 0.20))
+    S_IC = bound("S_IC (htc_pw) in [0.08, 0.20] kmol C/m3", COD_conc * 0.8 / 61.0, 0.08, 0.20)
 
     fractions = derive_adm1_fractions(C_pw, H_pw, O_pw, N_pw, S_pw,
                                        substrate_type="htc_pw", T_HTC=T_HTC)
@@ -1019,10 +1078,8 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
         f_slow = float(np.clip(_f_slow_override, 0, 1))
         print(f"[translate_pw] f_slow OVERRIDDEN to {f_slow:.3f}")
     else:
-        f_slow = float(np.clip(
-            0.40 + (T_HTC - 180.0) / (240.0 - 180.0) * 0.10,
-            0, 1
-        ))
+        f_slow = bound("f_slow in [0, 1]",
+                       0.40 + (T_HTC - 180.0) / (240.0 - 180.0) * 0.10, 0, 1)
     f_fast = 1.0 - f_slow
 
     # composition at T_HTC
@@ -1100,7 +1157,8 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
         V_inoc       = 2.0 * VS_sub / 12.0
         V_dig_meta   = V_feed + V_inoc
         COD_conc_inf = total_COD / V_dig_meta
-        S_IN         = min(N_feed / V_dig_meta / MW_N, 0.13)
+        S_IN         = bound("S_IN (feedstock, batch) <= 0.13 kmol N/m3",
+                             N_feed / V_dig_meta / MW_N, hi=0.13)
 
     S_IC = compute_S_IC(pH=8, T_op_K=T_op, p_CO2_atm=0.0005)
 

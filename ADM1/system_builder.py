@@ -442,8 +442,10 @@ def compute_htc_mass_balance(m_feed_eff, WC_feed, Y_char_pct, T_HTC,
     HC_dry_mass = dry_mass_in * Y_char_dry
 
     # 2. Water retained in the wet cake (limited by the water available)
-    HC_water_retained = min(HC_dry_mass * (MC_char / (1.0 - MC_char)),
-                            water_mass_in * 0.90)
+    _w_cake = HC_dry_mass * (MC_char / (1.0 - MC_char))
+    HC_water_retained = min(_w_cake, water_mass_in * 0.90)
+    if HC_water_retained < _w_cake:
+        _adm1_core.record_cap("hydrochar cake water <= 0.90 x feed water", _w_cake, HC_water_retained)
     HC_wet_yield = HC_dry_mass + HC_water_retained
 
     print(f"\n[MB diagnostic]")
@@ -458,7 +460,8 @@ def compute_htc_mass_balance(m_feed_eff, WC_feed, Y_char_pct, T_HTC,
     print(f"  HC_wet_yield      = {HC_wet_yield:.2f} kg")
 
     # 3. Gas formation and process water (PW) yield
-    Gas_yield_dry = max(0.0, 0.121 * T_HTC - 18.34) / 100.0
+    Gas_yield_dry = _adm1_core.bound("HTC gas yield >= 0 (0.121 T - 18.34)",
+                                     0.121 * T_HTC - 18.34, lo=0.0) / 100.0
     Gas_yield_total = m_feed_eff * dry_fraction * Gas_yield_dry
     gas_denom = CO2_frac_mol * MW_CO2 + CO_frac_mol * MW_CO
     CO2_yield = Gas_yield_total * (CO2_frac_mol * MW_CO2) / gas_denom
@@ -967,6 +970,8 @@ def split_centrifuge_N(m_digestate_total, dry_matter_kg, WC_solids,
             break
         N_liq = N_new
     if N_liq >= N_dig_kg - 1e-12 and N_dig_kg > 0:
+        _adm1_core.record_cap("centrifuge liquid N <= digestate N",
+                              S_IN_kmol_m3 * N_KG_PER_KMOL * m_liq / 1000.0, N_dig_kg)
         print(f"⚠️  [centrifuge N split] ADM1 dissolved N in the liquid "
               f"({S_IN_kmol_m3 * N_KG_PER_KMOL * m_liq / 1000.0:.2f} kg) >= digestate N "
               f"({N_dig_kg:.2f} kg): capped, ALL N leaves with the liquid. ADM1 N "
@@ -1012,6 +1017,15 @@ def dried_basis_for_htc(dp, NH4_kg, m_wet_kg):
     return out
 
 
+def format_caps(caps):
+    """'name (kind): raw -> used [x n]; ...' for a caps_report() dict."""
+    out = []
+    for k, v in caps.items():
+        n = f" [x{v['n']}]" if v["n"] > 1 else ""
+        out.append(f"{k} ({v['kind']}): {v['raw']:.4g} -> {v['used']:.4g}{n}")
+    return "; ".join(out)
+
+
 def _clamp_report(label, **raw_kg):
     """
     The process water elements are computed by difference,
@@ -1021,6 +1035,8 @@ def _clamp_report(label, **raw_kg):
     for the pw_clamped_elements column and prints the size of each clamp.
     """
     neg = {k: v for k, v in raw_kg.items() if v < 0}
+    for k, v in neg.items():
+        _adm1_core.record_cap(f"process water {k} >= 0 (by difference)", v, 0.0)
     if neg:
         txt = ", ".join(f"{k}={v:.3f} kg" for k, v in neg.items())
         print(f"⚠️  [{label}] PW element(s) clamped to 0 (char + gas > feed): {txt}")
@@ -1187,6 +1203,7 @@ def build_system(ctx: SystemContext,
     # out-of-range inputs (check_inputs)
     ml_params = check_inputs(ctx, adm1_mode=adm1_mode, adm1_HRT_days=adm1_HRT_days,
                              TS_target=TS_target)
+    _adm1_core.reset_caps()      # caps that bind in this run (caps_active, qa_flags)
     PATHWAY = ctx.PATHWAY
     m_feedstock = ctx.m_feedstock
     default_params = ctx.default_params
@@ -1337,6 +1354,8 @@ def build_system(ctx: SystemContext,
         if _NH4_B is None or not (0.0 <= _NH4_B <= N_feed_mass):
             print(f"⚠️  [DIGESTATE] ADM1 ammonium {_NH4_B} kg N not usable "
                   f"(feed N {N_feed_mass:.2f} kg): measured f_NH4 used instead")
+            _adm1_core.record_cap("digestate NH4: ADM1 S_IN replaced by measured f_NH4",
+                                  float("nan") if _NH4_B is None else _NH4_B, float("nan"))
             _NH4_B = None
             _NH4_source_B = "measured_f_NH4"
         digestate_params = ac.digestate_simple(
@@ -1865,10 +1884,23 @@ def build_system(ctx: SystemContext,
             waste_treatment["dg" + _k] = digestate_params.get(_k)
         waste_treatment["dg_NH4_source"] = _NH4_source_B
         waste_treatment["N_to_centrate_kg"] = float(N_to_centrate_kg_B)
+    # caps that bound in this run (ADM1.bound / record_cap)
+    if PATHWAY == "B" and "C_dig" in str(digestate_params.get("_dg_warnings", "")):
+        _adm1_core.record_cap("digestate C >= 0", float("nan"), 1e-9)
+    for _k, _flag in (("NOx_capped", "NOx_comb_kg"), ("SO2_capped", "SO2_comb_kg"), ("PM_capped", "PM_comb_kg")):
+        if q_enduse.get(_k):
+            _raw = {"NOx_comb_kg": "NOx_kg", "SO2_comb_kg": "SO2_kg", "PM_comb_kg": "PM_uncapped_kg"}[_flag]
+            _adm1_core.record_cap(f"{_k[:-7]} stack emission <= ELV (Directive 2015/2193)",
+                                  q_enduse[_raw], q_enduse[_flag], kind="design")
+    _caps = _adm1_core.caps_report()
+    waste_treatment["caps_active"] = format_caps(_caps)
+    waste_treatment["n_caps_correlation"] = sum(1 for v in _caps.values() if v["kind"] == "correlation")
+    waste_treatment["n_caps_design"] = sum(1 for v in _caps.values() if v["kind"] == "design")
     waste_treatment["qa_flags"] = "; ".join(qa_checks(
         PATHWAY=PATHWAY, inv=inv, mb=mb, ad_hi=ad_hi, CH4_mass=CH4_mass, CO2_mass=CO2_mass,
         MB=[waste_treatment.get(k) for k in ("MB_HTC_A", "MB_AD_A", "MB_AD_B", "MB_DW_B", "MB_HTC_B")],
-        m_ref=1000.0, energy_residual=waste_treatment.get("energy_closure_residual_MJ")))
+        m_ref=1000.0, energy_residual=waste_treatment.get("energy_closure_residual_MJ"))
+        + [f"cap: {c}" for c in format_caps(_caps).split("; ") if c])
     print(f"[QA] flags: {waste_treatment['qa_flags'] or 'none'}")
 
     waste_treatment.save()
