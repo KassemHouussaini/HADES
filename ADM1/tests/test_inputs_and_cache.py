@@ -133,3 +133,26 @@ def test_cache_invalidates_on_background_change_and_project(lcc):
     bd.projects.current = "p2"               # other project, same database names
     m.unit_score(act, meth)
     assert len(calls) == 3
+
+
+# ---------------------------------------------------------------- PW methane multiplier
+def test_pw_multiplier_identity(sb):
+    assert sb.apply_pw_ch4_multiplier(5.0, 9.0, 27.4, 1.0) == (5.0, 9.0, 1.0)
+
+
+def test_pw_multiplier_scales_ch4_and_co2(sb):
+    ch4, co2, m = sb.apply_pw_ch4_multiplier(5.198, 9.604, 27.4, 0.69)
+    assert ch4 == pytest.approx(5.198 * 0.69) and co2 == pytest.approx(9.604 * 0.69) and m == 0.69
+
+
+def test_pw_multiplier_capped_at_350_mL_per_g_COD(sb):
+    cod = 27.4
+    cap = 0.350 * cod * sb.CH4_density           # kg CH4
+    ch4, co2, m = sb.apply_pw_ch4_multiplier(cap * 0.9, 10.0, cod, 1.45)
+    assert ch4 == pytest.approx(cap)
+    assert m == pytest.approx(1 / 0.9) and co2 == pytest.approx(10.0 / 0.9)
+
+
+def test_pw_multiplier_must_be_positive(sb):
+    with pytest.raises(ValueError, match="pw_ch4_multiplier"):
+        sb.check_inputs(_ctx(sb, pw_ch4_multiplier=0.0))

@@ -221,6 +221,9 @@ class SystemContext:
     qc_heat_mix: Any = None              # foreground activity: Quebec industrial combustion heat mix
     heat_mix_components_qc: Any = None   # bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, ...)
     ash_disposal: Any = None             # ash treatment of the boiler ash (None -> omitted, printed)
+    # Pathway A: multiplier on the process-water digester methane (and CO2),
+    # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE
+    pw_ch4_multiplier: float = 1.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -328,10 +331,41 @@ def check_inputs(ctx, adm1_mode="batch", adm1_HRT_days=None, TS_target=0.08):
         raise ValueError(f"[check_inputs] continuous ADM1 needs adm1_HRT_days > 0, got {adm1_HRT_days}")
     if ctx.PATHWAY not in ("A", "B"):
         raise ValueError(f"[check_inputs] PATHWAY = {ctx.PATHWAY!r} must be 'A' or 'B'")
+    _m_pw = getattr(ctx, "pw_ch4_multiplier", 1.0)
+    if not (np.isfinite(float(_m_pw)) and float(_m_pw) > 0):
+        raise ValueError(f"[check_inputs] pw_ch4_multiplier = {_m_pw} must be > 0")
     if ctx.PATHWAY == "B" and ctx.feedstock_name not in ac.AD_CHARACTERIZATION:
         raise ValueError(f"[check_inputs] feedstock_name = {ctx.feedstock_name!r} not in "
                          f"{sorted(ac.AD_CHARACTERIZATION)}")
     return ml
+
+
+# Pathway A process-water methane multiplier m (sampled uniformly in sweeps).
+# Range: study-level measured BMP / PW-ADM1 from about 0.58 (Mannarino 2022)
+# to about 1.44 (Aragon-Briceno 2020), rounded outward. Central value 1.0
+# (not the data median, about 0.9) so that normal runs equal the calibrated
+# model. Not covered: complete inhibition (Marin-Batista 2020, 240 C), a
+# stated limitation. m scales CH4 and CO2 leaving the digester (biogas
+# composition kept), then CH4 is capped at the theoretical 350 mL CH4 per g
+# of process-water COD fed.
+PW_CH4_MULTIPLIER_RANGE = (0.55, 1.45)
+PW_CH4_MAX_NM3_PER_KG_COD = 0.350
+
+
+def apply_pw_ch4_multiplier(CH4_kg, CO2_kg, COD_fed_kg, m):
+    """Scale the digester CH4 and CO2 by m, then cap CH4 at 350 mL per g of
+    COD fed (CO2 scaled by the same effective factor). Returns
+    (CH4_kg, CO2_kg, m_effective)."""
+    m = float(m)
+    if m == 1.0:
+        return CH4_kg, CO2_kg, 1.0
+    ch4 = CH4_kg * m
+    ch4_max = PW_CH4_MAX_NM3_PER_KG_COD * COD_fed_kg * CH4_density
+    if ch4 > ch4_max:
+        _adm1_core.record_cap("PW methane <= 350 mL CH4/g COD fed", ch4, ch4_max)
+        ch4 = ch4_max
+    m_eff = ch4 / CH4_kg if CH4_kg > 0 else 0.0
+    return ch4, CO2_kg * m_eff, m_eff
 
 
 def get_or_create(db, code, name, unit, location="CA-QC", type_="process"):
@@ -1602,6 +1636,14 @@ def build_system(ctx: SystemContext,
             CO2_mass = adm1_out["CO2_mass_kg"] * _scale_A
             NH3_mass = adm1_out["NH3_mass_kg"] * _scale_A
 
+        # process-water methane multiplier (PW_CH4_MULTIPLIER_RANGE)
+        _COD_fed_A = float(pw_inputs["_total_COD_kg"]) * _scale_A
+        CH4_mass, CO2_mass, _m_eff_A = apply_pw_ch4_multiplier(
+            CH4_mass, CO2_mass, _COD_fed_A, ctx.pw_ch4_multiplier)
+        if ctx.pw_ch4_multiplier != 1.0:
+            print(f"[Pathway A] PW methane multiplier m={ctx.pw_ch4_multiplier} "
+                  f"(effective {_m_eff_A:.4f}): CH4={CH4_mass:.4f} kg/t")
+
     # =========================================================
     # STEP 5 — COMPUTE AD REFERENCE MASS & DIGESTATE MASS
     # =========================================================
@@ -1839,6 +1881,9 @@ def build_system(ctx: SystemContext,
         _v = q_enduse[_k]
         waste_treatment[f"enduse_{_k}"] = bool(_v) if isinstance(_v, (bool, np.bool_)) else float(_v)
     waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""
+    waste_treatment["pw_ch4_multiplier"] = float(ctx.pw_ch4_multiplier) if PATHWAY == "A" else None
+    waste_treatment["pw_ch4_multiplier_effective"] = float(_m_eff_A) if PATHWAY == "A" else None
+    waste_treatment["pw_COD_fed_kg"] = float(_COD_fed_A) if PATHWAY == "A" else None
     if PATHWAY == "B":
         for _k in ("_NH4_N_kg", "_dg_VS_destroyed", "_dg_f_NH4", "_dg_warnings",
                    "_m_dry_htc_kg", "_NH4_to_PW_kg"):
