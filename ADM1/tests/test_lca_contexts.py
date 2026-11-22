@@ -29,6 +29,7 @@ def test_province_presets(lcx):
         assert p["biomethane_use"] == "heat"
     assert lcx.get_preset("CA-ON")["key"] == "ON"
     assert lcx.get_preset("CA-YK")["location_code"] == "CA-YK"
+    assert lcx.get_preset("NL")["location_code"] == "CA-NF" and lcx.get_preset("CA-NF")["key"] == "NL"
     assert lcx.heat_mix_shares(lcx.get_preset("PE")) == lcx.hce.REGIONAL_HEAT_MIX["ATL"]
     assert "Atlantic" in lcx.get_preset("NS")["note"]
     with pytest.raises(KeyError):

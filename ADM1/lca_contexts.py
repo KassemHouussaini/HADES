@@ -37,7 +37,7 @@ _spec.loader.exec_module(hce)
 
 
 # ecoinvent location codes of the Canadian provinces and territories
-# (Yukon is CA-YK in ecoinvent). Datasets missing for a province fall back
+# (Yukon is CA-YK and Newfoundland and Labrador CA-NF in ecoinvent). Datasets missing for a province fall back
 # to CA, then RoW, then GLO; bw_lookup prints every fallback.
 _PROVINCES = {
     #      ecoinvent code   name                         NRCan heat-mix region
@@ -50,7 +50,7 @@ _PROVINCES = {
     "NB": ("CA-NB", "New Brunswick",             "ATL"),
     "NS": ("CA-NS", "Nova Scotia",               "ATL"),
     "PE": ("CA-PE", "Prince Edward Island",      "ATL"),
-    "NL": ("CA-NL", "Newfoundland and Labrador", "ATL"),
+    "NL": ("CA-NF", "Newfoundland and Labrador", "ATL"),
     "YT": ("CA-YK", "Yukon",                     "BC_TER"),
     "NT": ("CA-NT", "Northwest Territories",     "BC_TER"),
     "NU": ("CA-NU", "Nunavut",                   "BC_TER"),
@@ -91,7 +91,7 @@ def get_preset(key=DEFAULT_PRESET):
     k = str(key).upper()
     if k != "QC_PAPER1":
         k = k.replace("CA-", "")
-        k = {"YK": "YT"}.get(k, k)
+        k = {"YK": "YT", "NF": "NL"}.get(k, k)
     if k not in PRESETS:
         raise KeyError(f"no LCA context preset '{key}'; known: {sorted(PRESETS)}")
     return copy.deepcopy(PRESETS[k])

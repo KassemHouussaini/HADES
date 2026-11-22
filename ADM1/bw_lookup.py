@@ -31,9 +31,11 @@ def _real_search(db_name, query, limit=200):
     return out
 
 
-def find_process(ei, query, priority, name_filter=None, fallback_any=True):
+def find_process(ei, query, priority, name_filter=None, fallback_any=False):
     """Full scan -> exact name matches, else names starting with query ->
-    optional name_filter -> first location in priority -> sorted name."""
+    optional name_filter -> first location in priority -> sorted name.
+    No location of the priority list: LookupError, unless fallback_any=True
+    (then the alphabetically first location is used, e.g. "AE", with a warning)."""
     cand = _real_search(ei.name, query, limit=10 ** 9)
     ql = query.lower()
     pool = [r for r in cand if r["name"] == query]
@@ -52,6 +54,9 @@ def find_process(ei, query, priority, name_filter=None, fallback_any=True):
         print(f"  [background] WARNING '{query}': no priority location, "
               f"using '{r['name']}' [{r.get('location', '?')}]")
         return r
+    if pool:
+        raise LookupError(f"'{query}': no dataset in locations {list(priority)}; "
+                          f"available: {sorted({r.get('location', '?') for r in pool})}")
     raise ValueError(f"No process found for query: '{query}'")
 
 

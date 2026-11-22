@@ -31,7 +31,7 @@ def _load(name, fname):
 BG_ROLES = {
     "elec": ("market for electricity, medium voltage", "market for electricity, medium voltage"),
     "coal_heat": ("heat production, at hard coal industrial furnace 1-10MW", "hard coal industrial furnace"),
-    "ad_heat": ("heat production, natural gas", "heat production, natural gas"),
+    "ad_heat": ("heat production, natural gas, at boiler condensing modulating >100kW", "heat production, natural gas, at boiler condensing modulating >100kW"),
     "ng_heat_market": ("market for heat, district or industrial, natural gas",
                        "market for heat, district or industrial, natural gas"),
     "tap_water": ("market for tap water", "market for tap water"),
@@ -49,10 +49,10 @@ def check(ei, bwl, hce, lcx, keys):
                 try:
                     a = bwl.find_process(ei, q, loc, name_filter=nf)
                     got, name = a.get("location"), a["name"]
-                except ValueError:
-                    got, name = None, "NOT FOUND"
+                except (ValueError, LookupError) as e:
+                    got, name = None, f"NOT FOUND: {e}"
             rows.append(dict(preset=key, role=role, dataset=name, location=got,
-                             fallback=got != loc[0]))
+                             fallback=got != loc[0], in_priority=got in loc))
         for grp in lcx.heat_mix_shares(p):
             for n, prod, _w in hce.HEAT_MIX_DATASETS[grp]:
                 with contextlib.redirect_stdout(io.StringIO()):
@@ -62,7 +62,7 @@ def check(ei, bwl, hce, lcx, keys):
                     except LookupError:
                         got, n = None, n + " (NOT FOUND)"
                 rows.append(dict(preset=key, role=f"heat mix: {grp}", dataset=n, location=got,
-                                 fallback=got != loc[0]))
+                                 fallback=got != loc[0], in_priority=got in loc))
     return rows
 
 
@@ -86,6 +86,10 @@ def main():
     print(df.to_string(index=False))
     fb = df[df["fallback"]]
     print(f"\n{len(fb)} of {len(df)} lookups fall back from the province location.")
+    bad = df[~df["in_priority"]]
+    if len(bad):
+        print(f"{len(bad)} lookups found NO dataset in the priority locations:")
+        print(bad.to_string(index=False))
     if a.out:
         df.to_csv(a.out, index=False)
         print(f"written {a.out}")
