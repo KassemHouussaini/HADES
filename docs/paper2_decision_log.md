@@ -160,6 +160,18 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 
 ---
 
+## F. Sweep design
+
+### F1. Feedstocks for the first sweep (2026-11-22)
+**Decision.** Food waste, OFMSW, sewage sludge, and a fourth class (proposed: dairy manure, the only other class with both Pathway B degradability and digestate coefficients). Real compositions from the HTC training dataset, not independently varied elements.
+**Note.** In Pathway B, OFMSW uses the food waste degradability and digestate values (`PATHWAY_B_FEED_PARAMS`, `AD_CHARACTERIZATION`), so OFMSW differs from food waste only through composition and moisture.
+
+### F2. HTC surrogate prediction error not sampled for now (2026-11-22)
+**Decision.** The first sweep samples process and LCA parameters only; surrogate error is not included.
+**Consequence.** Probabilities that one pathway beats the other are conditional on the surrogate's point predictions and will be overconfident; they can rank scenarios but are not publishable as probabilities until surrogate error is added (see C0).
+
+---
+
 ## E. Open items
 
 1. Alberta and Saskatchewan mixes (85 to 88 % natural gas) likely include upstream oil and gas; subtracting NRCan's upstream mining table would fix it, otherwise state as a limitation.
