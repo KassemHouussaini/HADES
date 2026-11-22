@@ -145,12 +145,25 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Reading.** After D9 the natural gas credit is 1.07 times Quebec's in both pathways, consistent with the RoW boiler (1.06 times the CA-QC boiler); the artifact is gone. The hydrochar credit per MJ rises from 0.057 to 0.089 kg CO2 eq/MJ with Ontario's mix (60 % natural gas, 21 % coal and coke). The ranking flips: B ahead of A by 4.8 in QC_PAPER1, A ahead of B by 6.7 in Ontario. Both gaps are 5 to 7 % of the totals, so the ranking is close in both provinces. Ecosystem quality for B in Ontario is −198 PDF·m²·yr (the +25 before D9 was the artifact).
 **Caveat.** QC_PAPER1 vs ON also changes the heat mix source (EEQ vs NRCan) and the natural gas credit datasets; the clean regional comparison is `QC` vs `ON`.
 
+### D11. Same-method comparison: Quebec (Paper 2) vs Ontario (2026-11-22)
+**Result.** Food waste base case, GWP100, kg CO2 eq/t wet feedstock, both on the Paper 2 method (NRCan mix, boiler and furnace natural gas credit):
+
+| Term | A, QC | A, ON | B, QC | B, ON |
+|---|---|---|---|---|
+| Total | −83.0 | −107.2 | −86.9 | −100.5 |
+| HTC and drying electricity | 4.1 | 18.6 | 1.6 | 7.0 |
+| Credit, industrial heat mix | −79.4 | −121.5 | −33.9 | −51.9 |
+| Credit, natural gas heat | −17.4 | −18.6 | −81.7 | −87.5 |
+| Dilution water, wastewater, other | 1.5 | 5.9 | 1.7 | 5.6 |
+
+**Reading.** In Quebec the boiler and furnace natural gas credit equals the Paper 1 market credit exactly (−17.4, −81.7), as the CA-QC market is made of the same four technologies: D9 changes nothing in Quebec and only removes the CHP artifact elsewhere. Moving from the Paper 1 to the NRCan Quebec mix changes the hydrochar credit by 1.8 % (−77.9 → −79.4). Ranking: B ahead of A by 4.0 in Quebec, A ahead of B by 6.7 in Ontario; the flip holds on the same method. Quebec → Ontario, A gains 24.2 (heat mix credit −42.1, electricity +14.5), B gains 13.6 (heat mix credit −18.0, natural gas credit −5.8, electricity +5.5). Both gaps are 5 to 8 % of the totals, inside the expected uncertainty of the process-water multiplier and the surrogate; whether the ranking flips must be tested in the sweep with uncertainty.
+
 ---
 
 ## E. Open items
 
 1. Alberta and Saskatchewan mixes (85 to 88 % natural gas) likely include upstream oil and gas; subtracting NRCan's upstream mining table would fix it, otherwise state as a limitation.
 2. Quebec vs RoW dataset test: Quebec preset run with RoW heat datasets, to size the CA-QC vs RoW artifact on credits.
-3. Run `CONTEXT = "QC"` (Paper 2 Quebec) to compare with Ontario on the same method.
+3. Sweep notebook: provinces x pathways x feedstocks with the uncertain parameters (PW multiplier, B fD, k_hyd) sampled, to test whether the A/B ranking flips beyond uncertainty.
 4. HTC surrogate (C0) with supervisors.
 5. Sweep notebook.
