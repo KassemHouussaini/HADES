@@ -22,7 +22,7 @@ Usage
     ctxp = lca_contexts.get_preset("ON")
     LOC = ctxp["location_priority"]
     shares = sb.resolve_heat_mix_shares(ctxp["heat_mix_shares"])
-    heat_mix = bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, shares.keys(), LOC)
+    heat_mix = bwl.resolve_heat_mix(ei, lca_contexts.heat_mix_datasets(ctxp), shares.keys(), LOC)
     sb.SystemContext(..., **lca_contexts.ctx_kwargs(ctxp), heat_mix_components_qc=heat_mix)
 """
 
@@ -56,7 +56,8 @@ _PROVINCES = {
     "NU": ("CA-NU", "Nunavut",                   "BC_TER"),
 }
 
-_NRCAN = hce.REGIONAL_HEAT_MIX_SOURCE + ", electricity and other fuels excluded, renormalized"
+_NRCAN = (hce.REGIONAL_HEAT_MIX_SOURCE + ", electricity, other fuels"
+          + ("" if hce.INCLUDE_REFINERY_FUELS else ", still gas and petroleum coke") + " excluded, renormalized")
 
 
 def _preset(code, eic, name, region):
@@ -101,6 +102,13 @@ def heat_mix_shares(preset):
     """Group shares of the preset's displaced heat mix."""
     spec = preset["heat_mix_shares"]
     return dict(hce.QC_HEAT_MIX) if spec is None else hce.regional_heat_mix(spec)
+
+
+def heat_mix_datasets(preset):
+    """{group: [(activity, product, weight)]} to resolve with bw_lookup.resolve_heat_mix:
+    the Paper 1 weights (ecoinvent CA-QC market) or the region's NRCan PJ."""
+    spec = preset["heat_mix_shares"]
+    return hce.HEAT_MIX_DATASETS if spec is None else hce.regional_heat_mix_datasets(spec)
 
 
 def ctx_kwargs(preset):

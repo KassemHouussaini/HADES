@@ -85,29 +85,77 @@ HEAT_MIX_DATASETS = {
 }
 
 
-# Paper 2: regional industrial combustion heat mixes, 2023, from Natural
-# Resources Canada, Comprehensive Energy Use Database (OEE, 2025), industrial
-# sector Table 1. Electricity and "Other" (steam, cement waste fuels) are
-# excluded and the remaining fuels renormalized. "petroleum" includes still
-# gas and petroleum coke. "lpg_ngl" is LPG and gas-plant natural gas liquids
-# (not liquefied natural gas) and is mapped to the propane furnace. NRCan
-# publishes the four Atlantic provinces as one group and BC together with the
-# Territories, so those provinces take their group's mix. The values are the
-# rounded percentages of the NRCan tables (sums 0.999 to 1.001; the builder
-# renormalizes). QC_HEAT_MIX above stays the Paper 1 default.
-REGIONAL_HEAT_MIX_SOURCE = ("NRCan Comprehensive Energy Use Database (OEE, 2025), "
-                            "industrial sector Table 1, 2023")
-REGIONAL_HEAT_MIX = {
-    #              natural_gas bioenergy petroleum coal_coke lpg_ngl   combustion fuels, PJ
-    "QC":     dict(natural_gas=0.489, bioenergy=0.245, petroleum=0.218, coal_coke=0.039, lpg_ngl=0.009),  # 335
-    "ON":     dict(natural_gas=0.513, bioenergy=0.061, petroleum=0.232, coal_coke=0.178, lpg_ngl=0.016),  # 544
-    "MB":     dict(natural_gas=0.658, bioenergy=0.153, petroleum=0.138, coal_coke=0.007, lpg_ngl=0.044),  # 41
-    "SK":     dict(natural_gas=0.816, bioenergy=0.011, petroleum=0.159, coal_coke=0.000, lpg_ngl=0.014),  # 213
-    "AB":     dict(natural_gas=0.695, bioenergy=0.033, petroleum=0.240, coal_coke=0.000, lpg_ngl=0.033),  # 1437
-    "BC_TER": dict(natural_gas=0.358, bioenergy=0.396, petroleum=0.224, coal_coke=0.014, lpg_ngl=0.008),  # 271
-    "ATL":    dict(natural_gas=0.153, bioenergy=0.346, petroleum=0.447, coal_coke=0.031, lpg_ngl=0.023),  # 112
-    "CA":     dict(natural_gas=0.595, bioenergy=0.107, petroleum=0.235, coal_coke=0.040, lpg_ngl=0.023),  # 2952
-}
+# Paper 2: regional industrial combustion heat mixes, 2023. Source: Natural
+# Resources Canada, Comprehensive Energy Use Database (OEE), Industrial
+# Sector - Aggregated Industries, Table 1, energy use in PJ by energy source,
+# stored verbatim in data/nrcan_ceud_2023_industrial_table1.csv (Canada = sum
+# of the seven regions). Shares = combustion fuels only: electricity and
+# "Other" (steam, cement waste fuels) excluded, then renormalized.
+#   natural_gas  natural gas
+#   bioenergy    wood waste and pulping liquor
+#   petroleum    heavy fuel oil + diesel, light fuel oil and kerosene
+#                (+ still gas and petroleum coke if INCLUDE_REFINERY_FUELS)
+#   coal_coke    coal + coke and coke oven gas
+#   lpg_ngl      LPG and gas-plant NGL (not liquefied natural gas)
+# Still gas and petroleum coke are excluded by default: they are mostly
+# refinery and upgrader by-product fuels burned where they are produced,
+# which hydrochar does not displace. With INCLUDE_REFINERY_FUELS = True they
+# are assigned to the heavy fuel oil dataset (closest ecoinvent proxy).
+# Within petroleum and coal_coke, the dataset weights are the region's own
+# PJ (regional_heat_mix_datasets), not the ecoinvent CA-QC market weights.
+# NRCan publishes the four Atlantic provinces as one region (ATL) and BC with
+# the Territories (BC_TER); those provinces take their region's mix.
+# QC_HEAT_MIX above stays the Paper 1 default.
+import csv as _csv
+import os as _os
+
+INCLUDE_REFINERY_FUELS = False
+
+NRCAN_TABLE1_CSV = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                 "data", "nrcan_ceud_2023_industrial_table1.csv")
+
+REGIONAL_HEAT_MIX_SOURCE = ("NRCan Comprehensive Energy Use Database (OEE), Industrial Sector, "
+                            "Aggregated Industries, Table 1, 2023")
+
+
+def _load_nrcan_table1(path=NRCAN_TABLE1_CSV):
+    with open(path, newline="") as f:
+        rows = list(_csv.DictReader(l for l in f if not l.startswith("#")))
+    out = {r["region"]: {k: float(v) for k, v in r.items() if k != "region"} for r in rows}
+    cols = next(iter(out.values())).keys()
+    out["CA"] = {k: sum(r[k] for r in out.values()) for k in cols}
+    return out
+
+
+NRCAN_TABLE1_PJ = _load_nrcan_table1()
+
+
+def _group_datasets(pj, include_refinery_fuels):
+    """{group: [(activity, product, PJ)]} for one region; empty entries dropped."""
+    hfo = pj["heavy_fuel_oil"] + (pj["still_gas_petcoke"] if include_refinery_fuels else 0.0)
+    g = {
+        "natural_gas": [(HEAT_MIX_DATASETS["natural_gas"][0][0], _H_NG, pj["natural_gas"])],
+        "bioenergy":   [(HEAT_MIX_DATASETS["bioenergy"][0][0], _H_OTHER, pj["wood_waste_pulping_liquor"])],
+        "petroleum":   [("heat production, heavy fuel oil, at industrial furnace 1MW", _H_OTHER, hfo),
+                        ("heat production, light fuel oil, at industrial furnace 1MW", _H_OTHER,
+                         pj["diesel_lfo_kerosene"])],
+        "coal_coke":   [("heat production, at hard coal industrial furnace 1-10MW", _H_OTHER, pj["coal"]),
+                        ("heat production, at coal coke industrial furnace 1-10MW", _H_OTHER,
+                         pj["coke_coke_oven_gas"])],
+        "lpg_ngl":     [("heat production, propane, at industrial furnace >100kW", _H_OTHER, pj["lpg_ngl"])],
+    }
+    return {k: [e for e in v if e[2] > 0] for k, v in g.items() if sum(e[2] for e in v) > 0}
+
+
+def _region_key(province):
+    key = str(province).upper().replace("CA-", "")
+    region = PROVINCE_TO_HEAT_MIX_REGION.get(key, key)
+    if region not in NRCAN_TABLE1_PJ:
+        raise KeyError(f"no industrial heat mix for '{province}'; "
+                       f"known: {sorted(set(PROVINCE_TO_HEAT_MIX_REGION) | set(NRCAN_TABLE1_PJ))}")
+    return region
+
+
 # provinces and territories -> NRCan region
 PROVINCE_TO_HEAT_MIX_REGION = {
     "QC": "QC", "ON": "ON", "MB": "MB", "SK": "SK", "AB": "AB",
@@ -116,15 +164,25 @@ PROVINCE_TO_HEAT_MIX_REGION = {
 }
 
 
-def regional_heat_mix(province):
-    """Shares of the 2023 industrial combustion heat mix for a province or
-    territory code (e.g. "QC", "BC") or an NRCan region key (e.g. "ATL", "CA")."""
-    key = str(province).upper().replace("CA-", "")
-    region = PROVINCE_TO_HEAT_MIX_REGION.get(key, key)
-    if region not in REGIONAL_HEAT_MIX:
-        raise KeyError(f"no industrial heat mix for '{province}'; "
-                       f"known: {sorted(set(PROVINCE_TO_HEAT_MIX_REGION) | set(REGIONAL_HEAT_MIX))}")
-    return dict(REGIONAL_HEAT_MIX[region])
+def regional_heat_mix(province, include_refinery_fuels=None):
+    """Group shares (sum 1) of the 2023 industrial combustion heat mix for a
+    province or territory code ("QC", "BC", "CA-ON") or an NRCan region key
+    ("ATL", "BC_TER", "CA")."""
+    inc = INCLUDE_REFINERY_FUELS if include_refinery_fuels is None else include_refinery_fuels
+    g = _group_datasets(NRCAN_TABLE1_PJ[_region_key(province)], inc)
+    tot = {k: sum(e[2] for e in v) for k, v in g.items()}
+    s = sum(tot.values())
+    return {k: v / s for k, v in tot.items()}
+
+
+def regional_heat_mix_datasets(province, include_refinery_fuels=None):
+    """HEAT_MIX_DATASETS-like {group: [(activity, product, weight)]} with the
+    region's own PJ as weights (for bw_lookup.resolve_heat_mix)."""
+    inc = INCLUDE_REFINERY_FUELS if include_refinery_fuels is None else include_refinery_fuels
+    return _group_datasets(NRCAN_TABLE1_PJ[_region_key(province)], inc)
+
+
+REGIONAL_HEAT_MIX = {r: regional_heat_mix(r) for r in NRCAN_TABLE1_PJ}
 
 
 # =============================================================================

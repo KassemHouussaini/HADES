@@ -20,20 +20,37 @@ def test_qc_heat_mix_shares(hce):
 
 
 def test_regional_heat_mixes(hce):
-    # NRCan CEUD 2023 industrial Table 1, electricity and "Other" excluded
+    # NRCan CEUD 2023, Industrial (aggregated), Table 1, PJ; electricity, "Other",
+    # still gas and petroleum coke excluded by default
     for region, mix in hce.REGIONAL_HEAT_MIX.items():
         assert set(mix) <= set(hce.HEAT_MIX_DATASETS), region
-        assert sum(mix.values()) == pytest.approx(1.0, abs=0.002), region
-        assert min(mix.values()) >= 0.0, region
-    qc = hce.regional_heat_mix("CA-QC")
-    assert (qc["natural_gas"], qc["bioenergy"], qc["petroleum"], qc["coal_coke"], qc["lpg_ngl"]) \
-        == (0.489, 0.245, 0.218, 0.039, 0.009)
-    # grouped NRCan regions
+        assert sum(mix.values()) == pytest.approx(1.0, abs=1e-12), region
+        assert min(mix.values()) > 0.0, region
+    qc = hce.regional_heat_mix("CA-QC")      # 301.5 PJ: sum of the fuel rows
+    assert qc["natural_gas"] == pytest.approx(163.6 / 301.5, rel=1e-9)
+    assert qc["bioenergy"] == pytest.approx(82.0 / 301.5, rel=1e-9)
+    assert qc["petroleum"] == pytest.approx((33.7 + 6.3) / 301.5, rel=1e-9)
+    assert qc["coal_coke"] == pytest.approx((8.4 + 4.6) / 301.5, rel=1e-9)
+    assert qc["lpg_ngl"] == pytest.approx(2.9 / 301.5, rel=1e-9)
+    # with refinery fuels: reproduces 48.9 / 24.5 / 21.8 / 3.9 / 0.9 (QC) and Canada 2952 PJ
+    qi = hce.regional_heat_mix("QC", include_refinery_fuels=True)
+    assert [round(100 * qi[k], 1) for k in ("natural_gas", "bioenergy", "petroleum", "coal_coke", "lpg_ngl")] \
+        == [48.9, 24.5, 21.8, 3.9, 0.9]
+    ca = hce.NRCAN_TABLE1_PJ["CA"]
+    assert ca["total"] - ca["electricity"] - ca["other"] == pytest.approx(2951.6, abs=0.05)
+    # rows of the stored tables add up to the printed totals (rounding <= 0.3 PJ)
+    for r, v in hce.NRCAN_TABLE1_PJ.items():
+        if r != "CA":
+            assert sum(x for k, x in v.items() if k != "total") == pytest.approx(v["total"], abs=0.3), r
+    # grouped regions, zero groups dropped, regional dataset weights
     assert hce.regional_heat_mix("NS") == hce.REGIONAL_HEAT_MIX["ATL"]
     assert hce.regional_heat_mix("bc") == hce.REGIONAL_HEAT_MIX["BC_TER"]
+    assert "coal_coke" not in hce.regional_heat_mix("SK")
+    ds = hce.regional_heat_mix_datasets("ON")
+    assert [w for _, _, w in ds["coal_coke"]] == [9.3, 87.4]
+    assert "propane" in ds["lpg_ngl"][0][0]
     with pytest.raises(KeyError):
         hce.regional_heat_mix("XX")
-    assert "propane" in hce.HEAT_MIX_DATASETS["lpg_ngl"][0][0]
 
 
 def test_mj_hand_calculation(hce):
@@ -118,4 +135,4 @@ def test_heat_mix_shares_switch(sb, hce):
     sb.build_heat_mix_exchanges(mix, comps, shares)
     amounts = {e["input"]: e["amount"] for e in mix.ex}
     assert sum(amounts.values()) == pytest.approx(1.0, rel=1e-12)       # renormalized to 1 MJ
-    assert amounts["act_lpg_ngl"] == pytest.approx(0.009 / sum(shares.values()), rel=1e-12)
+    assert amounts["act_lpg_ngl"] == pytest.approx(2.9 / 301.5, rel=1e-9)

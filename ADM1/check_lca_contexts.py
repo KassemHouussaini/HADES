@@ -53,8 +53,9 @@ def check(ei, bwl, hce, lcx, keys):
                     got, name = None, f"NOT FOUND: {e}"
             rows.append(dict(preset=key, role=role, dataset=name, location=got,
                              fallback=got != loc[0], in_priority=got in loc))
+        ds = lcx.heat_mix_datasets(p)
         for grp in lcx.heat_mix_shares(p):
-            for n, prod, _w in hce.HEAT_MIX_DATASETS[grp]:
+            for n, prod, _w in ds[grp]:
                 with contextlib.redirect_stdout(io.StringIO()):
                     try:
                         a = bwl.find_exact(ei, n, loc, product=prod)

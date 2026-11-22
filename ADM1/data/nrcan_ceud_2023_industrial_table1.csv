@@ -1,0 +1,11 @@
+# NRCan, Comprehensive Energy Use Database (OEE), Industrial Sector - Aggregated Industries, Table 1: Secondary Energy Use and GHG Emissions by Energy Source, 2023, energy use in PJ
+# https://oee.nrcan.gc.ca/corporate/statistics/neud/dpa/showTable.cfm?type=CP&sector=agg&juris=<region>&rn=1&year=2023&page=1  (juris: atl, qc, on, mb, sk, ab, bct)
+# "Other" includes steam and waste fuels from the cement industry. Canada = sum of the seven regions (2951.6 PJ of combustion fuels).
+region,total,electricity,natural_gas,diesel_lfo_kerosene,heavy_fuel_oil,still_gas_petcoke,lpg_ngl,coal,coke_coke_oven_gas,wood_waste_pulping_liquor,other
+ATL,152.5,37.1,17.2,14.0,6.4,29.7,2.6,0.7,2.8,38.8,3.4
+QC,689.4,351.0,163.6,33.7,6.3,33.1,2.9,8.4,4.6,82.0,3.9
+ON,688.9,139.5,279.0,42.7,2.5,81.1,8.8,9.3,87.4,33.0,5.6
+MB,56.6,15.4,27.1,5.1,0.3,0.3,1.8,0.3,0.0,6.3,0.0
+SK,256.7,40.1,173.5,18.1,0.0,15.8,2.9,0.0,0.0,2.3,4.2
+AB,1549.3,97.3,998.5,83.2,0.0,261.7,46.8,0.0,0.0,46.8,15.1
+BC_TER,344.2,73.4,97.0,55.3,0.2,5.1,2.2,3.4,0.3,107.4,0.0

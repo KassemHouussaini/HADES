@@ -154,7 +154,7 @@ PROVINCE_PRESET = {v[1]: k for k, v in lcx._PROVINCES.items()}
 HEAT_MIX_CHOICES = ["NRCan 2023, selected province", "Paper 1 Quebec mix (EEQ 2026)"]
 
 
-def resolve_background(ei, prio, groups):
+def resolve_background(ei, prio, groups, datasets):
     """Background datasets of the case study notebook, chosen by location priority."""
     find = lambda q, p=prio, nf=None: bwl.find_process(ei, q, p, name_filter=nf)
     bg = dict(
@@ -171,7 +171,7 @@ def resolve_background(ei, prio, groups):
         psa_ref=find("biogas purification to biomethane by pressure swing adsorption", ["RoW", "GLO"] + prio),
     )
     bg["ad_elec"] = bg["drying_heat"] = bg["elec"]        # AD and dryer run on grid electricity
-    heat_mix = bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, groups, prio)
+    heat_mix = bwl.resolve_heat_mix(ei, datasets, groups, prio)
     try:
         ash = bwl.find_exact(ei, "market for wood ash mixture, pure", prio)
     except LookupError:
@@ -297,6 +297,7 @@ with st.sidebar:
         st.info("Outside Canada the industrial heat mix displaced by hydrochar uses the Paper 1 Quebec "
                 "fuel shares; its datasets follow the location priority above.")
     heat_mix_shares = sb.resolve_heat_mix_shares(heat_mix_spec)
+    heat_mix_ds = hce.HEAT_MIX_DATASETS if heat_mix_spec is None else hce.regional_heat_mix_datasets(heat_mix_spec)
     st.caption("Heat mix: " + ", ".join(f"{k} {v:.1%}" for k, v in heat_mix_shares.items()))
 
     try:
@@ -374,7 +375,7 @@ if run_button:
         bwl.GENERIC_FLOW_DB = biosphere_of(bd, EI_NAME)
         ei, bios = bd.Database(EI_NAME), bd.Database(bwl.GENERIC_FLOW_DB)
         progress.progress(10, text="Resolving background datasets…")
-        bg, heat_mix, ash = resolve_background(ei, loc_prio, heat_mix_shares.keys())
+        bg, heat_mix, ash = resolve_background(ei, loc_prio, heat_mix_shares.keys(), heat_mix_ds)
         log = pd.DataFrame([{"Role": k, "Dataset": a["name"], "Location": a.get("location", "?"),
                              "Exact": "yes" if a.get("location") == loc_code else "fallback"}
                             for k, a in bg.items() if k not in ("ad_elec", "drying_heat")])
