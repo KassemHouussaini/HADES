@@ -132,12 +132,25 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Methods text.** "Natural gas heat displaced by biomethane and by hydrochar was represented by industrial boilers and furnaces, using the technology split of the ecoinvent 3.12 CA-QC heat market, in every province. The RoW market available outside Quebec is dominated by combined heat and power with allocated burdens (0.038 vs 0.069 kg CO2 eq/MJ) and does not represent displaced industrial heat."
 **Open.** To confirm with supervisors (methods choice).
 
+### D10. First regional run after D9: Ontario vs Quebec (2026-11-22)
+**Result.** Food waste base case, `HADES.ipynb`, GWP100 (IMPACT World+ climate change short term), kg CO2 eq/t wet feedstock:
+
+| Term | A, QC_PAPER1 | A, ON | B, QC_PAPER1 | B, ON |
+|---|---|---|---|---|
+| Total | −81.5 | −107.2 | −86.3 | −100.5 |
+| HTC and drying electricity | 4.1 | 18.6 | 1.6 | 7.0 |
+| Credit, industrial heat mix | −77.9 | −121.5 | −33.3 | −51.9 |
+| Credit, natural gas heat | −17.4 | −18.6 | −81.7 | −87.5 |
+
+**Reading.** After D9 the natural gas credit is 1.07 times Quebec's in both pathways, consistent with the RoW boiler (1.06 times the CA-QC boiler); the artifact is gone. The hydrochar credit per MJ rises from 0.057 to 0.089 kg CO2 eq/MJ with Ontario's mix (60 % natural gas, 21 % coal and coke). The ranking flips: B ahead of A by 4.8 in QC_PAPER1, A ahead of B by 6.7 in Ontario. Both gaps are 5 to 7 % of the totals, so the ranking is close in both provinces. Ecosystem quality for B in Ontario is −198 PDF·m²·yr (the +25 before D9 was the artifact).
+**Caveat.** QC_PAPER1 vs ON also changes the heat mix source (EEQ vs NRCan) and the natural gas credit datasets; the clean regional comparison is `QC` vs `ON`.
+
 ---
 
 ## E. Open items
 
 1. Alberta and Saskatchewan mixes (85 to 88 % natural gas) likely include upstream oil and gas; subtracting NRCan's upstream mining table would fix it, otherwise state as a limitation.
 2. Quebec vs RoW dataset test: Quebec preset run with RoW heat datasets, to size the CA-QC vs RoW artifact on credits.
-3. Re-run Ontario after D9 and record the result.
+3. Run `CONTEXT = "QC"` (Paper 2 Quebec) to compare with Ontario on the same method.
 4. HTC surrogate (C0) with supervisors.
 5. Sweep notebook.
