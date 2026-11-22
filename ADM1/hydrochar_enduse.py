@@ -41,7 +41,7 @@ COAL_KG_PER_MJ = 0.04325           # same ecoinvent activity, coal input per MJ 
 
 # Quebec industrial combustion heat mix (electricity excluded), normalized
 # shares by energy carrier, from the industrial energy consumption reported in
-# Whitmore, J. and Pineau, P.-O. (2026). Etat de l'energie au Quebec 2026.
+# Whitmore, J. and Pineau, P.-O. (2026). Etat de l'energie au Quebec 2026, Graphique 25.
 # Chaire de gestion du secteur de l'energie, HEC Montreal.
 QC_HEAT_MIX = {
     "natural_gas": 0.506,
@@ -64,7 +64,7 @@ QC_HEAT_MIX = {
 # 0.00671; coal and coke: hard coal 0.155, coal coke 0.067). Bioenergy is
 # represented by the only CA-QC wood heat dataset of that market (wood chips
 # CHP); because the activity has two products, the reference product is also
-# matched. Liquefied natural gas (0.8 %) uses the natural gas heat market.
+# matched. Natural gas liquids, LGN (0.8 %, propane and butane; Paper 1 label "lng") use the natural gas heat market in the Paper 1 mix.
 _H_NG = "heat, district or industrial, natural gas"
 
 
