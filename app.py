@@ -36,6 +36,7 @@ def _load_module(name, filepath):
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 sb = _load_module("system_builder", os.path.join(_APP_DIR, "ADM1", "system_builder.py"))
 bwl, hce, hi = sb.bwl, sb.hce, sb.hi
+lcx = _load_module("lca_contexts", os.path.join(_APP_DIR, "ADM1", "lca_contexts.py"))
 ML_MODULE_PATH = os.path.join(_APP_DIR, "ML training scripts and models", "htc_surrogate.py")
 
 # Defaults of the article's case study (background database and LCIA indicators)
@@ -120,7 +121,7 @@ LOCATION_HIERARCHY = {
         "British Columbia":           {"code": "CA-BC", "fallback": ["CA", "RoW", "GLO"]},
         "Manitoba":                   {"code": "CA-MB", "fallback": ["CA", "RoW", "GLO"]},
         "New Brunswick":              {"code": "CA-NB", "fallback": ["CA", "RoW", "GLO"]},
-        "Newfoundland and Labrador":  {"code": "CA-NL", "fallback": ["CA", "RoW", "GLO"]},
+        "Newfoundland and Labrador":  {"code": "CA-NF", "fallback": ["CA", "RoW", "GLO"]},
         "Northwest Territories":      {"code": "CA-NT", "fallback": ["CA", "RoW", "GLO"]},
         "Nova Scotia":                {"code": "CA-NS", "fallback": ["CA", "RoW", "GLO"]},
         "Nunavut":                    {"code": "CA-NU", "fallback": ["CA", "RoW", "GLO"]},
@@ -128,7 +129,7 @@ LOCATION_HIERARCHY = {
         "Prince Edward Island":       {"code": "CA-PE", "fallback": ["CA", "RoW", "GLO"]},
         "Quebec":                     {"code": "CA-QC", "fallback": ["CA", "RoW", "GLO"]},
         "Saskatchewan":               {"code": "CA-SK", "fallback": ["CA", "RoW", "GLO"]},
-        "Yukon":                      {"code": "CA-YT", "fallback": ["CA", "RoW", "GLO"]},
+        "Yukon":                      {"code": "CA-YK", "fallback": ["CA", "RoW", "GLO"]},
     },
     "USA": {
         "California":     {"code": "US-WECC", "fallback": ["US", "RNA", "RoW", "GLO"]},
@@ -148,13 +149,19 @@ def location_priority(country, province):
     return info["code"], [info["code"]] + list(info["fallback"])
 
 
-def resolve_background(ei, prio):
+# Canadian province name -> lca_contexts preset key (NRCan 2023 heat mix)
+PROVINCE_PRESET = {v[1]: k for k, v in lcx._PROVINCES.items()}
+HEAT_MIX_CHOICES = ["NRCan 2023, selected province", "Paper 1 Quebec mix (EEQ 2026)"]
+
+
+def resolve_background(ei, prio, groups):
     """Background datasets of the case study notebook, chosen by location priority."""
     find = lambda q, p=prio, nf=None: bwl.find_process(ei, q, p, name_filter=nf)
     bg = dict(
         elec=find("market for electricity, medium voltage", nf="market for electricity, medium voltage"),
         coal_heat=find("heat production, at hard coal industrial furnace 1-10MW", nf="hard coal industrial furnace"),
-        ad_heat=find("heat production, natural gas", nf="heat production, natural gas"),
+        ad_heat=find("heat production, natural gas, at boiler condensing modulating >100kW",
+                     nf="heat production, natural gas, at boiler condensing modulating >100kW"),
         ng_heat_market=find("market for heat, district or industrial, natural gas",
                             nf="market for heat, district or industrial, natural gas"),
         biomethane_heat_ref=find("heat production, biomethane, at boiler condensing modulating",
@@ -164,7 +171,7 @@ def resolve_background(ei, prio):
         psa_ref=find("biogas purification to biomethane by pressure swing adsorption", ["RoW", "GLO"] + prio),
     )
     bg["ad_elec"] = bg["drying_heat"] = bg["elec"]        # AD and dryer run on grid electricity
-    heat_mix = bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, hce.QC_HEAT_MIX.keys(), prio)
+    heat_mix = bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, groups, prio)
     try:
         ash = bwl.find_exact(ei, "market for wood ash mixture, pure", prio)
     except LookupError:
@@ -272,9 +279,25 @@ with st.sidebar:
                                        if sel_country == "Canada" else 0))
     loc_code, loc_prio = location_priority(sel_country, sel_province)
     st.caption(f"Dataset location priority: {' → '.join(loc_prio)}")
-    if loc_code != "CA-QC":
-        st.info("The industrial heat mix displaced by hydrochar uses Quebec fuel shares; "
-                "its datasets follow the location priority above.")
+    if sel_country == "Canada":
+        heat_mix_choice = st.radio(
+            "Industrial heat mix displaced by hydrochar", HEAT_MIX_CHOICES,
+            index=1 if sel_province == "Quebec" else 0,
+            help="NRCan Comprehensive Energy Use Database 2023, industrial Table 1, electricity and "
+                 "other fuels excluded. Atlantic provinces share one mix, BC shares one with the Territories.")
+        if heat_mix_choice == HEAT_MIX_CHOICES[0]:
+            _preset = lcx.get_preset(PROVINCE_PRESET[sel_province])
+            heat_mix_spec = _preset["heat_mix_shares"]
+            if _preset["note"]:
+                st.caption(_preset["note"])
+        else:
+            heat_mix_spec = None
+    else:
+        heat_mix_spec = None
+        st.info("Outside Canada the industrial heat mix displaced by hydrochar uses the Paper 1 Quebec "
+                "fuel shares; its datasets follow the location priority above.")
+    heat_mix_shares = sb.resolve_heat_mix_shares(heat_mix_spec)
+    st.caption("Heat mix: " + ", ".join(f"{k} {v:.1%}" for k, v in heat_mix_shares.items()))
 
     try:
         import bw2data as bd
@@ -351,7 +374,7 @@ if run_button:
         bwl.GENERIC_FLOW_DB = biosphere_of(bd, EI_NAME)
         ei, bios = bd.Database(EI_NAME), bd.Database(bwl.GENERIC_FLOW_DB)
         progress.progress(10, text="Resolving background datasets…")
-        bg, heat_mix, ash = resolve_background(ei, loc_prio)
+        bg, heat_mix, ash = resolve_background(ei, loc_prio, heat_mix_shares.keys())
         log = pd.DataFrame([{"Role": k, "Dataset": a["name"], "Location": a.get("location", "?"),
                              "Exact": "yes" if a.get("location") == loc_code else "fallback"}
                             for k, a in bg.items() if k not in ("ad_elec", "drying_heat")])
@@ -368,7 +391,7 @@ if run_button:
             feedstock_name=DIGESTATE_TYPES[dig_type], eps_HR=eps_HR, nox_conv=nox_conv,
             heat_mix_components_qc=heat_mix, ash_disposal=ash,
             location_country=sel_country, location_province=sel_province, location_code=loc_code,
-            location_priority=loc_prio)
+            location_priority=loc_prio, heat_mix_shares=heat_mix_spec)
         ss = None
         if adm1_mode == "continuous":
             progress.progress(30, text="AD spin-up to steady state…")
