@@ -12,8 +12,10 @@ depends on where the plant is:
                      (None = Paper 1 Quebec mix, hce.QC_HEAT_MIX; a key of
                      hce.REGIONAL_HEAT_MIX = NRCan CEUD 2023)
 
-Biomethane displaces heat only, from the regional "market for heat, district
-or industrial, natural gas", which follows location_priority.
+Biomethane displaces heat only. Paper 1 (QC_PAPER1): ecoinvent "market for
+heat, district or industrial, natural gas". Province presets: natural gas
+boilers and furnaces (hce.NG_INDUSTRIAL_HEAT, no CHP), also used for the
+natural gas share of the heat mix.
 
 Attributional framing: average mixes for supply and for the displaced
 products. Pure Python, no Brightway import.
@@ -70,7 +72,7 @@ def _preset(code, eic, name, region):
         key=code, name=name, location_country="CA", location_province=code,
         location_code=eic, location_priority=[eic, "CA", "RoW", "GLO"],
         heat_mix_shares=region, heat_mix_source=_NRCAN + f" (region {region})",
-        biomethane_use="heat", note=note)
+        biomethane_use="heat", ng_heat="boilers_furnaces", note=note)
 
 
 PRESETS = {code: _preset(code, *v) for code, v in _PROVINCES.items()}
@@ -82,7 +84,7 @@ PRESETS["QC_PAPER1"] = dict(
     heat_mix_shares=None,
     heat_mix_source=("Whitmore and Pineau (2026), Etat de l'energie au Quebec 2026, "
                      "Graphique 25 (industry, 2023), electricity excluded, renormalized"),
-    biomethane_use="heat", note="Paper 1 case study configuration.")
+    biomethane_use="heat", ng_heat="market", note="Paper 1 case study configuration.")
 
 DEFAULT_PRESET = "QC_PAPER1"
 
@@ -109,6 +111,13 @@ def heat_mix_datasets(preset):
     the Paper 1 weights (ecoinvent CA-QC market) or the region's NRCan PJ."""
     spec = preset["heat_mix_shares"]
     return hce.HEAT_MIX_DATASETS if spec is None else hce.regional_heat_mix_datasets(spec)
+
+
+def ng_heat_datasets(preset):
+    """Natural gas heat displaced by biomethane: None = ecoinvent "market for
+    heat, district or industrial, natural gas" (Paper 1); otherwise the
+    (activity, product, weight) list of hce.NG_INDUSTRIAL_HEAT."""
+    return None if preset.get("ng_heat") == "market" else list(hce.NG_INDUSTRIAL_HEAT)
 
 
 def ctx_kwargs(preset):

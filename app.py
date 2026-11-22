@@ -298,6 +298,8 @@ with st.sidebar:
                 "fuel shares; its datasets follow the location priority above.")
     heat_mix_shares = sb.resolve_heat_mix_shares(heat_mix_spec)
     heat_mix_ds = hce.HEAT_MIX_DATASETS if heat_mix_spec is None else hce.regional_heat_mix_datasets(heat_mix_spec)
+    # Paper 2 (NRCan mix): natural gas heat = boilers and furnaces, no CHP (hce.NG_INDUSTRIAL_HEAT)
+    ng_heat_ds = None if heat_mix_spec is None else list(hce.NG_INDUSTRIAL_HEAT)
     st.caption("Heat mix: " + ", ".join(f"{k} {v:.1%}" for k, v in heat_mix_shares.items()))
 
     try:
@@ -376,6 +378,8 @@ if run_button:
         ei, bios = bd.Database(EI_NAME), bd.Database(bwl.GENERIC_FLOW_DB)
         progress.progress(10, text="Resolving background datasets…")
         bg, heat_mix, ash = resolve_background(ei, loc_prio, heat_mix_shares.keys(), heat_mix_ds)
+        ng_heat_comp = (bwl.resolve_heat_mix(ei, {"ng": ng_heat_ds}, ["ng"], loc_prio)["ng"]
+                        if ng_heat_ds else None)
         log = pd.DataFrame([{"Role": k, "Dataset": a["name"], "Location": a.get("location", "?"),
                              "Exact": "yes" if a.get("location") == loc_code else "fallback"}
                             for k, a in bg.items() if k not in ("ad_elec", "drying_heat")])
@@ -392,7 +396,7 @@ if run_button:
             feedstock_name=DIGESTATE_TYPES[dig_type], eps_HR=eps_HR, nox_conv=nox_conv,
             heat_mix_components_qc=heat_mix, ash_disposal=ash,
             location_country=sel_country, location_province=sel_province, location_code=loc_code,
-            location_priority=loc_prio, heat_mix_shares=heat_mix_spec)
+            location_priority=loc_prio, heat_mix_shares=heat_mix_spec, ng_heat_components=ng_heat_comp)
         ss = None
         if adm1_mode == "continuous":
             progress.progress(30, text="AD spin-up to steady state…")

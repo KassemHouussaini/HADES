@@ -233,6 +233,9 @@ class SystemContext:
     # Pathway B: overrides of the feedstock degradability (ADM1.PATHWAY_B_FEED_PARAMS),
     # e.g. {"fD": 0.80, "f_sol": 0.30, "k_hyd": 0.20}; None = tabulated values
     b_feed_overrides: Optional[dict] = None
+    # heat displaced by biomethane: None -> ctx.ng_heat_market (Paper 1); or
+    # [(activity, weight)] (e.g. lca_contexts.ng_heat_datasets resolved), weights normalized
+    ng_heat_components: Optional[list] = None
     # Heat supply of the three heat consumers (see HEAT_SUPPLY_DOC):
     # {"htc": ..., "dryer": ..., "ad": ...}, each "electricity", "own_biogas"
     # or a Brightway activity delivering heat in MJ. None or a missing key:
@@ -1816,13 +1819,14 @@ def build_system(ctx: SystemContext,
     # heat supply (HEAT_CONSUMERS): None keeps the Paper 1 exchanges exactly;
     # otherwise heat demands are planned, and biogas burned on site is
     # diverted before the PSA
-    _heat_plan, _CH4_div_MJ, _heat_short, _heat_dem, _heat_src = None, 0.0, {}, {}, {}
+    _heat_plan, _CH4_div_MJ, _heat_short, _heat_src = None, 0.0, {}, {}
+    # net heat demands (MJ), recorded in every run
+    _heat_dem = {"htc": Q_heat_kWh * 3.6 * hi.ETA_HTC_UTILITY,
+                 "dryer": elec_MJ,
+                 "ad": hi.ad_duty(m_AD_in, T_in_C=_T_AD_in_C,
+                                  Q_rec_avail_MJ=_Q_rec_AD_MJ)["Q_AD_util_MJ"]}
     if ctx.heat_supply is not None:
         _heat_src = resolve_heat_sources(ctx)
-        _heat_dem = {"htc": Q_heat_kWh * 3.6 * hi.ETA_HTC_UTILITY,
-                     "dryer": elec_MJ,
-                     "ad": hi.ad_duty(m_AD_in, T_in_C=_T_AD_in_C,
-                                      Q_rec_avail_MJ=_Q_rec_AD_MJ)["Q_AD_util_MJ"]}
         _heat_plan, _CH4_div_MJ, _heat_short = plan_heat_supply(
             _heat_src, _heat_dem, CH4_m3 * LHV_biomethane, heat_biomethane,
             ctx.heat_backup if ctx.heat_backup is not None else ad_heat)
@@ -1900,8 +1904,14 @@ def build_system(ctx: SystemContext,
             heat_biomethane.new_exchange(input=exc.input, amount=0,
                                           type="technosphere", unit=exc["unit"]).save()
 
-    heat_naturalgas.new_exchange(input=ng_heat_market, amount=1,
-                                  type="technosphere", unit="megajoule").save()
+    if ctx.ng_heat_components:
+        _wsum = float(sum(w for _, w in ctx.ng_heat_components))
+        for _act, _w in ctx.ng_heat_components:
+            heat_naturalgas.new_exchange(input=_act, amount=float(_w) / _wsum,
+                                          type="technosphere", unit="megajoule").save()
+    else:
+        heat_naturalgas.new_exchange(input=ng_heat_market, amount=1,
+                                      type="technosphere", unit="megajoule").save()
 
     waste_treatment.new_exchange(input=htc_reactor, amount=1, type="technosphere", unit="unit").save()
     waste_treatment.new_exchange(input=drying, amount=1, type="technosphere", unit="unit").save()
@@ -2030,6 +2040,10 @@ def build_system(ctx: SystemContext,
     waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""
     waste_treatment["pw_ch4_multiplier"] = float(ctx.pw_ch4_multiplier) if PATHWAY == "A" else None
     waste_treatment["pw_ch4_multiplier_effective"] = float(_m_eff_A) if PATHWAY == "A" else None
+    waste_treatment["ng_heat_credit"] = ("; ".join(f"{a.get('name')} [{a.get('location')}]"
+                                                   for a, _ in ctx.ng_heat_components)
+                                         if ctx.ng_heat_components else
+                                         f"{ng_heat_market.get('name')} [{ng_heat_market.get('location')}]")
     # heat supply of this run
     _src_name = lambda v: v if isinstance(v, str) else f"{v.get('name')} [{v.get('location')}]"
     waste_treatment["heat_supply"] = ("paper1_default" if ctx.heat_supply is None else

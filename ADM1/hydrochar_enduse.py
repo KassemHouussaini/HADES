@@ -111,6 +111,23 @@ import os as _os
 
 INCLUDE_REFINERY_FUELS = False
 
+# Natural gas heat for industry (Paper 2 presets): the boiler and furnace
+# technologies of the ecoinvent 3.12 CA-QC "market for heat, district or
+# industrial, natural gas", with its weights, taken in every region from the
+# region's location priority. The RoW market used outside Quebec is about 94 %
+# combined heat and power (Russian and RoW conventional plants alone 60 %),
+# whose heat carries only part of the plant burden through allocation
+# (0.0377 vs 0.0690 kg CO2 eq/MJ for CA-QC, IMPACT World+ climate change short
+# term); it does not represent industrial heat displaced in a Canadian
+# province. Used for the natural gas share of the heat mix and for the heat
+# displaced by biomethane.
+NG_INDUSTRIAL_HEAT = [
+    ("heat production, natural gas, at boiler modulating >100kW", _H_NG, 0.2532),
+    ("heat production, natural gas, at industrial furnace >100kW", _H_NG, 0.2408),
+    ("heat production, natural gas, at industrial furnace low-NOx >100kW", _H_NG, 0.2370),
+    ("heat production, natural gas, at boiler condensing modulating >100kW", _H_NG, 0.2690),
+]
+
 NRCAN_TABLE1_CSV = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
                                  "data", "nrcan_ceud_2023_industrial_table1.csv")
 
@@ -134,7 +151,7 @@ def _group_datasets(pj, include_refinery_fuels):
     """{group: [(activity, product, PJ)]} for one region; empty entries dropped."""
     hfo = pj["heavy_fuel_oil"] + (pj["still_gas_petcoke"] if include_refinery_fuels else 0.0)
     g = {
-        "natural_gas": [(HEAT_MIX_DATASETS["natural_gas"][0][0], _H_NG, pj["natural_gas"])],
+        "natural_gas": [(n, prod, w * pj["natural_gas"]) for n, prod, w in NG_INDUSTRIAL_HEAT],
         "bioenergy":   [(HEAT_MIX_DATASETS["bioenergy"][0][0], _H_OTHER, pj["wood_waste_pulping_liquor"])],
         "petroleum":   [("heat production, heavy fuel oil, at industrial furnace 1MW", _H_OTHER, hfo),
                         ("heat production, light fuel oil, at industrial furnace 1MW", _H_OTHER,

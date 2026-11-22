@@ -53,6 +53,14 @@ def check(ei, bwl, hce, lcx, keys):
                     got, name = None, f"NOT FOUND: {e}"
             rows.append(dict(preset=key, role=role, dataset=name, location=got,
                              fallback=got != loc[0], in_priority=got in loc))
+        for n, prod, _w in (lcx.ng_heat_datasets(p) or []):
+            with contextlib.redirect_stdout(io.StringIO()):
+                try:
+                    got = bwl.find_exact(ei, n, loc, product=prod).get("location")
+                except LookupError:
+                    got, n = None, n + " (NOT FOUND)"
+            rows.append(dict(preset=key, role="biomethane credit (NG heat)", dataset=n, location=got,
+                             fallback=got != loc[0], in_priority=got in loc))
         ds = lcx.heat_mix_datasets(p)
         for grp in lcx.heat_mix_shares(p):
             for n, prod, _w in ds[grp]:

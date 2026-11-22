@@ -32,6 +32,9 @@ def test_pathway_b_options(tmp_path):
     mix = {e["input"]: e["amount"] for e in d["exchanges"]["qc_heat_mix"]}
     assert sum(mix.values()) == pytest.approx(1.0, rel=1e-9)
     assert any("coal coke" in k for k in mix)                 # Ontario steel-industry coke
+    ng = {e["input"]: e["amount"] for e in d["exchanges"]["heat_ng"]}   # biomethane credit
+    assert len(ng) == 4 and sum(ng.values()) == pytest.approx(1.0, rel=1e-12)
+    assert all("natural gas, at" in k for k in ng)          # boilers and furnaces, no CHP
 
 
 @pytest.mark.slow

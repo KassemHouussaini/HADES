@@ -46,3 +46,13 @@ def test_ctx_kwargs_are_context_fields(lcx, sb):
     fields = {f.name for f in dataclasses.fields(sb.SystemContext)}
     assert set(lcx.ctx_kwargs(lcx.get_preset("AB"))) <= fields
     assert sb.resolve_heat_mix_shares(lcx.get_preset("AB")["heat_mix_shares"]) == lcx.hce.REGIONAL_HEAT_MIX["AB"]
+
+
+def test_ng_heat_credit(lcx):
+    assert lcx.ng_heat_datasets(lcx.get_preset("QC_PAPER1")) is None          # Paper 1: market
+    ng = lcx.ng_heat_datasets(lcx.get_preset("ON"))
+    assert [round(w, 4) for _, _, w in ng] == [0.2532, 0.2408, 0.2370, 0.2690]   # CA-QC market split
+    assert not any("co-generation" in n for n, _, _ in ng)
+    # natural gas share of the regional heat mix uses the same technologies, weights x PJ
+    ds = lcx.heat_mix_datasets(lcx.get_preset("ON"))["natural_gas"]
+    assert [n for n, _, _ in ds] == [n for n, _, _ in ng]

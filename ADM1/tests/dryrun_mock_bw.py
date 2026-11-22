@@ -130,6 +130,9 @@ if _cx and PORTED:
     kw["heat_mix_components_qc"] = {g: [(tech(f"{n} heat dataset", "megajoule"), w / sum(x[2] for x in _ds[g]))
                                         for n, _, w in _ds[g]] for g in lcx.heat_mix_shares(_p)}
     kw.update({k: v for k, v in lcx.ctx_kwargs(_p).items() if k == "heat_mix_shares"})
+    _ng = lcx.ng_heat_datasets(_p)
+    if _ng:
+        kw["ng_heat_components"] = [(tech(f"{n} heat dataset", "megajoule"), w) for n, _, w in _ng]
 if os.environ.get("HADES_B_FEED"):
     kw["b_feed_overrides"] = json.loads(os.environ["HADES_B_FEED"])
 if os.environ.get("HADES_PW_M"):
