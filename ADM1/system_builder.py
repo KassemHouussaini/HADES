@@ -230,6 +230,9 @@ class SystemContext:
     # Pathway A: multiplier on the process-water digester methane (and CO2),
     # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE
     pw_ch4_multiplier: float = 1.0
+    # Pathway B: overrides of the feedstock degradability (ADM1.PATHWAY_B_FEED_PARAMS),
+    # e.g. {"fD": 0.80, "f_sol": 0.30, "k_hyd": 0.20}; None = tabulated values
+    b_feed_overrides: Optional[dict] = None
     # Heat supply of the three heat consumers (see HEAT_SUPPLY_DOC):
     # {"htc": ..., "dryer": ..., "ad": ...}, each "electricity", "own_biogas"
     # or a Brightway activity delivering heat in MJ. None or a missing key:
@@ -1403,6 +1406,7 @@ def build_system(ctx: SystemContext,
             feedstock_wet_kg=m_feedstock, mode=adm1_mode,
             HRT_days=adm1_HRT_days, TS_target=TS_target,
             feedstock_name=ctx.feedstock_name,
+            feed_overrides=ctx.b_feed_overrides,
         )
 
         m_feedstock_slurry = feed_inputs["_m_slurry_kg"]

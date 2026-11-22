@@ -119,6 +119,21 @@ _hs = os.environ.get("HADES_HEAT_SUPPLY")
 if _hs:
     _map = {"electricity": "electricity", "own_biogas": "own_biogas", "ng": kw["ad_heat"]}
     kw["heat_supply"] = {k: _map[v] for k, v in (x.split("=") for x in _hs.split(","))}
+# optional Paper 2 options: HADES_CONTEXT="ON" (lca_contexts preset: displaced heat mix),
+# HADES_B_FEED='{"fD": 0.8}' (Pathway B degradability overrides), HADES_PW_M="1.2"
+_cx = os.environ.get("HADES_CONTEXT")
+if _cx and PORTED:
+    _spec = importlib.util.spec_from_file_location("lca_contexts", os.path.join(folder, "lca_contexts.py"))
+    lcx = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(lcx)
+    _p = lcx.get_preset(_cx)
+    _ds = lcx.heat_mix_datasets(_p)
+    kw["heat_mix_components_qc"] = {g: [(tech(f"{n} heat dataset", "megajoule"), w / sum(x[2] for x in _ds[g]))
+                                        for n, _, w in _ds[g]] for g in lcx.heat_mix_shares(_p)}
+    kw.update({k: v for k, v in lcx.ctx_kwargs(_p).items() if k == "heat_mix_shares"})
+if os.environ.get("HADES_B_FEED"):
+    kw["b_feed_overrides"] = json.loads(os.environ["HADES_B_FEED"])
+if os.environ.get("HADES_PW_M"):
+    kw["pw_ch4_multiplier"] = float(os.environ["HADES_PW_M"])
 ctx = sb.SystemContext(**kw)
 
 ml_file = sys.argv[5] if len(sys.argv) > 5 else "htc_surrogate.py"
