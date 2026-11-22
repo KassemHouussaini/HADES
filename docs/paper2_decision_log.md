@@ -20,6 +20,9 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Decision.** `notebooks/HADES.ipynb` carries every Paper 2 option for a practitioner running one or two scenarios. Large simulation campaigns get a separate sweep notebook.
 **Code.** 12b32e0.
 
+### A3. Decision log kept by request, no CLAUDE.md (2026-11-22)
+**Decision.** This log is updated with every decision, in the same commit as the code change. No instruction file is added to the repository; the user asks for the log to be kept updated at the start of each session.
+
 ---
 
 ## B. Coding traps fixed before sweeps
