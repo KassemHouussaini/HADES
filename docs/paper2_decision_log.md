@@ -233,6 +233,9 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **To verify.** The sources are from web searches (abstracts and snippets); the full texts should be checked and cited properly before the paper.
 **Code.** see commit "Feed moisture".
 
+### F8. Screening temperatures 180 and 240 °C (2026-11-23)
+**Decision.** The Morris screening runs at T = 180 and 240 °C (was 180 and 260), user's choice. Sweep folder `morris_v2`; `morris_v1` holds only the 12 timing points of the 180/260 design. Size unchanged: 6,720 points, about 12 h on 12 workers.
+
 ---
 
 ## E. Open items
