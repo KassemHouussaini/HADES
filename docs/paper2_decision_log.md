@@ -158,6 +158,12 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 
 **Reading.** In Quebec the boiler and furnace natural gas credit equals the Paper 1 market credit exactly (−17.4, −81.7), as the CA-QC market is made of the same four technologies: D9 changes nothing in Quebec and only removes the CHP artifact elsewhere. Moving from the Paper 1 to the NRCan Quebec mix changes the hydrochar credit by 1.8 % (−77.9 → −79.4). Ranking: B ahead of A by 4.0 in Quebec, A ahead of B by 6.7 in Ontario; the flip holds on the same method. Quebec → Ontario, A gains 24.2 (heat mix credit −42.1, electricity +14.5), B gains 13.6 (heat mix credit −18.0, natural gas credit −5.8, electricity +5.5). Both gaps are 5 to 8 % of the totals, inside the expected uncertainty of the process-water multiplier and the surrogate; whether the ranking flips must be tested in the sweep with uncertainty.
 
+### B4. ADM1 mode selectable; Pathway A batch result fixed (2026-11-23)
+**Decision.** `HADES.ipynb` offers `ADM1_MODE`: "continuous" (default; full-scale digester at steady state, used for the LCA of a plant and for all sweeps) or "batch" (BMP-test simulation with inoculum and blank correction, for comparison with lab BMP data), with `BATCH_DAYS` and `ISR_BATCH`.
+**Bug found.** In batch mode, Pathway A recorded the raw test-bottle methane (inoculum included) instead of the blank-corrected value, and did not scale from the bottle to the FU. The bottle is filled at the substrate COD concentration over the whole liquid volume, inoculum included, so it holds more COD than the process water of the FU (base case 60.15 vs 27.46 kg). Base food waste: 17.83 kg CH4/t recorded (above the 6.86 kg theoretical maximum of the COD fed); corrected 4.69 kg CH4/t (239 mL CH4/g COD), against 5.20 in continuous mode. Pathway B batch was already correct (its bottle holds exactly the FU COD).
+**Scope.** Paper 1 results used continuous mode only and are not affected. The same bug is on `main` (Paper 1 code); the Streamlit app on `main` offers batch mode and gives wrong Pathway A results there. The PW-ADM1 validation figure (batch) normalizes by the COD loaded in the bottle and is correct.
+**Code.** see commit "ADM1 batch mode".
+
 ---
 
 ## F. Sweep design

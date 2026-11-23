@@ -48,3 +48,20 @@ def test_pathway_a_options(tmp_path):
     assert m["heat_shortfall_htc_MJ"] > 0
     mix = {e["input"]: e["amount"] for e in d["exchanges"]["qc_heat_mix"]}
     assert not any("coal" in k for k in mix)                  # Alberta: no coal or coke in 2023
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("pathway", ["A", "B"])
+def test_batch_mode_blank_corrected_per_fu(pathway, tmp_path):
+    # ADM1 batch (BMP test): blank-corrected methane, scaled from the bottle to the FU.
+    # Pathway A: bottle holds COD_conc x V_liq = 60.15 kg COD for 27.46 kg in the FU.
+    d = _run(pathway, tmp_path / f"batch_{pathway}.json", HADES_MODE="batch")
+    m = d["meta"]
+    assert m["adm1_mode"] == "batch"
+    if pathway == "A":
+        assert m["CH4_mass_AD"] == pytest.approx(4.6918, rel=1e-3)
+        ml_per_g = m["CH4_mass_AD"] / 0.716 / m["pw_COD_fed_kg"] * 1000
+        assert ml_per_g < 350                                   # below the theoretical maximum
+        assert m["CH4_mass_AD"] < BASE_A["CH4_mass_AD"]          # 30-d BMP below continuous at 30 d HRT
+    else:
+        assert m["CH4_mass_AD"] == pytest.approx(23.053, rel=1e-3)

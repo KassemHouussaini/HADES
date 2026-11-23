@@ -1818,9 +1818,17 @@ def _build_system(ctx: SystemContext,
                   f"scale={_gas_scale_A:.5f}  "
                   f"CH4={CH4_mass:.4f} kg/t  CO2={CO2_mass:.4f} kg/t")
         else:
-            CH4_mass = adm1_out["CH4_mass_kg"] * _scale_A
-            CO2_mass = adm1_out["CO2_mass_kg"] * _scale_A
-            NH3_mass = adm1_out["NH3_mass_kg"] * _scale_A
+            # batch (BMP test): blank-corrected gas from run_adm1_and_correct,
+            # per kg of COD loaded in the bottle (COD_conc x V_liq: the
+            # substrate fills the whole liquid volume, inoculum included),
+            # scaled to the COD of the process water of this FU
+            _COD_bottle = float(pw_inputs["_COD_conc"]) * float(adm1_out["_V_liq"])
+            _batch_scale_A = float(pw_inputs["_total_COD_kg"]) / _COD_bottle * _scale_A
+            CH4_mass, CO2_mass, NH3_mass = (CH4_mass * _batch_scale_A, CO2_mass * _batch_scale_A,
+                                            NH3_mass * _batch_scale_A)
+            print(f"[Pathway A | batch] COD in bottle {_COD_bottle:.2f} kg, process water "
+                  f"{float(pw_inputs['_total_COD_kg']):.2f} kg -> scale {_batch_scale_A:.4f}  "
+                  f"CH4={CH4_mass:.4f} kg/t (blank-corrected)")
 
         # process-water methane multiplier (PW_CH4_MULTIPLIER_RANGE)
         _COD_fed_A = float(pw_inputs["_total_COD_kg"]) * _scale_A
