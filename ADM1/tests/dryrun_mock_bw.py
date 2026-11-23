@@ -117,10 +117,15 @@ ctx = sb.SystemContext(**kw)
 
 ml_file = sys.argv[5] if len(sys.argv) > 5 else "htc_surrogate.py"
 ml = os.path.join(folder, "..", "ML training scripts and models", ml_file)
-ss = sb.spinup_ss_state(ctx, pathway=PATHWAY, adm1_HRT_days=30, t_spinup=400, verbose=False, ml_module=ml)
-wt, ss_state, adm1_out, feed_inputs, inv = sb.build_system(
-    ctx, ml_module=ml, adm1_mode="continuous", adm1_HRT_days=30, adm1_t_sim_days=None,
-    adm1_ss_state=ss, ISR_batch=2.0)
+if os.environ.get("HADES_MODE", "continuous") == "batch":   # BMP-test simulation, no spin-up
+    import matplotlib; matplotlib.use("Agg")
+    wt, ss_state, adm1_out, feed_inputs, inv = sb.build_system(
+        ctx, ml_module=ml, adm1_mode="batch", adm1_t_sim_days=30, ISR_batch=2.0)
+else:
+    ss = sb.spinup_ss_state(ctx, pathway=PATHWAY, adm1_HRT_days=30, t_spinup=400, verbose=False, ml_module=ml)
+    wt, ss_state, adm1_out, feed_inputs, inv = sb.build_system(
+        ctx, ml_module=ml, adm1_mode="continuous", adm1_HRT_days=30, adm1_t_sim_days=None,
+        adm1_ss_state=ss, ISR_batch=2.0)
 
 def dump(a):
     return [{"input": e.input["name"], "type": e["type"], "unit": e["unit"], "amount": e["amount"]}

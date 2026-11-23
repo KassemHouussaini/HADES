@@ -32,3 +32,23 @@ def test_base_case_frozen(pathway, tmp_path):
         assert meta[k] == pytest.approx(v, rel=1e-5), k
     # Base-A at 180 C: char H/C and O/C just above the training 99th percentile; flagged, not fatal
     assert ("HC_atomic" in meta["qa_flags"]) == (pathway == "A")
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("pathway", ["A", "B"])
+def test_batch_mode_blank_corrected_per_fu(pathway, tmp_path):
+    """ADM1 batch mode (BMP test): blank-corrected methane, scaled from the
+    bottle to the FU. Pathway A: the bottle holds COD_conc x V_liq of
+    substrate, more than the process water of the FU."""
+    out = tmp_path / f"batch_{pathway}.json"
+    r = subprocess.run([sys.executable, SCRIPT, ADM1_DIR, pathway, str(out), "0.35", "htc_surrogate.py"],
+                       capture_output=True, text=True, timeout=900, env={**os.environ, "HADES_MODE": "batch"})
+    assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
+    meta = json.load(open(out))["meta"]
+    assert meta["adm1_mode"] == "batch"
+    if pathway == "A":
+        assert meta["CH4_mass_AD"] == pytest.approx(4.6918, rel=1e-3)
+        assert meta["CH4_mass_AD"] < FROZEN["A"]["CH4_mass_AD"]    # 30-d BMP below continuous at 30 d HRT
+        cod_fed = meta.get("pw_COD_fed_kg")
+        if cod_fed:
+            assert meta["CH4_mass_AD"] / 0.716 / cod_fed * 1000 < 350
