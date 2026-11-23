@@ -135,6 +135,10 @@ if _cx and PORTED:
         kw["ng_heat_components"] = [(tech(f"{n} heat dataset", "megajoule"), w) for n, _, w in _ng]
 if os.environ.get("HADES_B_FEED"):
     kw["b_feed_overrides"] = json.loads(os.environ["HADES_B_FEED"])
+if os.environ.get("HADES_HI"):
+    kw["hi_overrides"] = json.loads(os.environ["HADES_HI"])
+if os.environ.get("HADES_U_FC"):
+    kw["u_fc"] = float(os.environ["HADES_U_FC"])
 if os.environ.get("HADES_PW_M"):
     kw["pw_ch4_multiplier"] = float(os.environ["HADES_PW_M"])
 ctx = sb.SystemContext(**kw)

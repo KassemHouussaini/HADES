@@ -236,6 +236,13 @@ class SystemContext:
     # heat displaced by biomethane: None -> ctx.ng_heat_market (Paper 1); or
     # [(activity, weight)] (e.g. lca_contexts.ng_heat_datasets resolved), weights normalized
     ng_heat_components: Optional[list] = None
+    # sweep overrides of heat_integration constants that carry a sourced range
+    # (SWEEP_HI_PARAMS), e.g. {"F_LOSS_AD": 0.25}; applied for one build_system
+    # call and restored afterwards. None = module defaults (Paper 1).
+    hi_overrides: Optional[dict] = None
+    # Pathway B: position (0-1) of the digestate fixed-carbon ratio in its
+    # measured range (ad_characterization fc_ratio_range); None = central value
+    u_fc: Optional[float] = None
     # Heat supply of the three heat consumers (see HEAT_SUPPLY_DOC):
     # {"htc": ..., "dryer": ..., "ad": ...}, each "electricity", "own_biogas"
     # or a Brightway activity delivering heat in MJ. None or a missing key:
@@ -1303,7 +1310,51 @@ def spinup_ss_state(ctx: SystemContext, pathway: str,
 # BUILD SYSTEM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_system(ctx: SystemContext,
+# heat_integration constants a sweep may override, with their range
+SWEEP_HI_PARAMS = {
+    "T_AMB_C": "T_AMB_RANGE_C",
+    "F_LOSS_HTC": "F_LOSS_HTC_RANGE",
+    "DT_DEWATER_LOSS_K": "DT_DEWATER_LOSS_RANGE_K",
+    "PRESS_KWH_PER_T_DS": "PRESS_KWH_RANGE",
+    "DRYER_SEC_TH_MJ_PER_KG": "DRYER_SEC_TH_RANGE",
+    "T_SEP_C": "T_SEP_RANGE_C",
+    "F_LOSS_AD": "F_LOSS_AD_RANGE",
+}
+
+
+class _HiOverrides:
+    """Set heat_integration constants for one build, restore them after."""
+    def __init__(self, overrides):
+        self.ov, self.old = dict(overrides or {}), {}
+
+    def __enter__(self):
+        for k, v in self.ov.items():
+            if k not in SWEEP_HI_PARAMS:
+                raise ValueError(f"[hi_overrides] {k!r} is not a sweep parameter; "
+                                 f"use one of {sorted(SWEEP_HI_PARAMS)}")
+            lo, hi_ = getattr(hi, SWEEP_HI_PARAMS[k])
+            if not (np.isfinite(v) and lo - 1e-12 <= float(v) <= hi_ + 1e-12):
+                raise ValueError(f"[hi_overrides] {k} = {v} outside its range ({lo}, {hi_})")
+        for k, v in self.ov.items():
+            self.old[k] = getattr(hi, k)
+            setattr(hi, k, float(v))
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self.old.items():
+            setattr(hi, k, v)
+        return False
+
+
+def build_system(ctx, ml_module, *args, **kwargs):
+    """build_system with ctx.hi_overrides applied (see _build_system)."""
+    if ctx.u_fc is not None and not 0.0 <= float(ctx.u_fc) <= 1.0:
+        raise ValueError(f"[check_inputs] u_fc = {ctx.u_fc} must be in [0, 1]")
+    with _HiOverrides(ctx.hi_overrides):
+        return _build_system(ctx, ml_module, *args, **kwargs)
+
+
+def _build_system(ctx: SystemContext,
                   ml_module,
                   adm1_mode="batch",
                   adm1_HRT_days=None,
@@ -1487,7 +1538,7 @@ def build_system(ctx: SystemContext,
         digestate_params = ac.digestate_simple(
             ctx.feedstock_name, C_feed_mass, H_feed_mass, O_feed_mass,
             N_feed_mass, S_feed_mass, ash_kg_feed,
-            CH4_mass, CO2_mass, m_feedstock_slurry, NH4_N_kg=_NH4_B)
+            CH4_mass, CO2_mass, m_feedstock_slurry, NH4_N_kg=_NH4_B, u_fc=ctx.u_fc)
         print(f"[Pathway B | DIGESTATE] dry {digestate_params['_m_dry_kg']:.1f} kg  "
               f"VS destroyed {digestate_params['_dg_VS_destroyed'] * 100:.1f} %  "
               f"NH4-N {digestate_params['_NH4_N_kg']:.2f} kg ({_NH4_source_B})  "
@@ -2040,6 +2091,9 @@ def build_system(ctx: SystemContext,
     waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""
     waste_treatment["pw_ch4_multiplier"] = float(ctx.pw_ch4_multiplier) if PATHWAY == "A" else None
     waste_treatment["pw_ch4_multiplier_effective"] = float(_m_eff_A) if PATHWAY == "A" else None
+    waste_treatment["hi_overrides"] = (", ".join(f"{k}={v:g}" for k, v in sorted(ctx.hi_overrides.items()))
+                                       if ctx.hi_overrides else "")
+    waste_treatment["u_fc"] = ctx.u_fc
     waste_treatment["ng_heat_credit"] = ("; ".join(f"{a.get('name')} [{a.get('location')}]"
                                                    for a, _ in ctx.ng_heat_components)
                                          if ctx.ng_heat_components else

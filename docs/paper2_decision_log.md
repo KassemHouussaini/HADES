@@ -170,6 +170,12 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Decision.** The first sweep samples process and LCA parameters only; surrogate error is not included.
 **Consequence.** Probabilities that one pathway beats the other are conditional on the surrogate's point predictions and will be overconfident; they can rank scenarios but are not publishable as probabilities until surrogate error is added (see C0).
 
+### F3. Uncertain parameters exposed per run (2026-11-23)
+**Decision.** Every parameter with a range in the code can now be set per run without editing modules: `ctx.hi_overrides` for the heat-integration constants (`SWEEP_HI_PARAMS`: ambient temperature 5 to 20 °C, extra HTC loss 0 to 0.4, dewatering temperature loss 0 to 10 K, press electricity 20 to 30 kWh/t TS, dryer heat 1.8 to 4.32 MJ/kg water, separation temperature 60 to 80 °C, digester loss fraction 0.1 to 0.3), `ctx.u_fc` for the digestate fixed-carbon ratio (position in its measured range), plus the existing `eps_HR` (0.5 to 0.6), `MC_char` (0.30 to 0.50), `nox_conv` (0.01 to 0.25), `pw_ch4_multiplier` (0.55 to 1.45) and `b_feed_overrides` (fD, f_sol, k_hyd per class). Overrides are applied for one `build_system` call and restored; values outside their range are refused.
+**Not sampled.** The digestate f_NH4 (used only as a fallback when ADM1 ammonium is out of range).
+**Range quality.** Sourced: press electricity, dryer heat, MC_char, eps_HR, NOx conversion, PW multiplier, Pathway B degradability, FC ratio. Model assumptions (to state in the paper): ambient temperature, separation temperature (60 to 80 °C, no citation in the code), dewatering temperature loss, digester loss fraction (0.2 checked against a wall-loss calculation), extra HTC loss (0 default, 0.4 reported by one design).
+**Code.** see commit "Sweep parameters".
+
 ---
 
 ## E. Open items

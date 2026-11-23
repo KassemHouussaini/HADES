@@ -113,8 +113,27 @@ def test_qa_flags_biogas_and_char(sb):
 
 def test_lhv_and_end_use_present_in_source(sb):
     import inspect
-    src = inspect.getsource(sb.build_system)
+    src = inspect.getsource(sb._build_system)
     assert "LHV_biomethane = 35.8" in src
     assert "build_hydrochar_enduse_exchanges(ctx, q_enduse, bios)" in src
     psa = inspect.getsource(sb.build_biogas_upgrading_exchanges)
     assert 'startswith("methane, non-fossil")' in psa
+
+
+def test_hi_overrides_set_and_restore(sb):
+    hi = sb.hi
+    before = {k: getattr(hi, k) for k in sb.SWEEP_HI_PARAMS}
+    with sb._HiOverrides({"F_LOSS_AD": 0.3, "DRYER_SEC_TH_MJ_PER_KG": 1.8}):
+        assert hi.F_LOSS_AD == 0.3 and hi.DRYER_SEC_TH_MJ_PER_KG == 1.8
+        assert hi.dryer_duty(10.0)["Q_dry_th_MJ"] == pytest.approx(18.0)       # 10 kg water x 1.8 MJ/kg
+    assert {k: getattr(hi, k) for k in sb.SWEEP_HI_PARAMS} == before          # restored
+    with pytest.raises(ValueError):
+        with sb._HiOverrides({"F_LOSS_AD": 0.9}):                              # outside (0.1, 0.3)
+            pass
+    with pytest.raises(ValueError):
+        with sb._HiOverrides({"ETA_HTC_UTILITY": 0.8}):                        # not a sweep parameter
+            pass
+    assert {k: getattr(hi, k) for k in sb.SWEEP_HI_PARAMS} == before
+    for k, r in sb.SWEEP_HI_PARAMS.items():                                    # every default inside its range
+        lo, up = getattr(hi, r)
+        assert lo <= getattr(hi, k) <= up, k
