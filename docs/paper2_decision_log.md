@@ -61,6 +61,22 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Code.** f9857fc, 671eed3. Overrides for sweeps and practitioners: `ctx.b_feed_overrides` (12b32e0).
 **Paper 1.** Pathway A unchanged. Pathway B base case (food waste) changes: CH4 −13.1 %, hydrochar +20.7 %; frozen B values updated on purpose.
 
+### C1b. Hydrolysis kinetics and HRT: effect on Paper 1 (2026-11-23)
+**Finding.** With the Paper 1 feed (X_xc = 0, so the BSM2 disintegration step, k_dis 0.5 d⁻¹, is bypassed; k_hyd 10 d⁻¹), hydrolysis has a half-life of 0.07 d: a batch BMP of Pathway B plateaus within about one day, whereas measured food waste BMPs take 15 to 30 days (test end criterion: Holliger et al. 2016, Water Sci. Technol. 74:2515). With the Paper 2 feed (k_hyd 0.18 d⁻¹, 44 % soluble), the batch curve rises over one to three weeks (checked by the user in `HADES.ipynb`, batch mode).
+**HRT.** 30 d is a sound design HRT; the Paper 1 kinetics made any HRT above a few days look complete. Pathway B, food waste, continuous, CH4 kg/t (mock dry run):
+
+| HRT | Paper 1 code | Paper 2 code |
+|---|---|---|
+| 20 d | 27.74 | 23.22 |
+| 30 d | 28.09 | 24.40 |
+| 40 d | 28.35 | 25.14 |
+| 20 → 40 d | +2.2 % | +8.3 % |
+
+The small HRT sensitivity in Paper 1 is a model artifact. At 30 d, a steady-state digester hydrolyses k·HRT/(1 + k·HRT) = 84 % of the particulate COD, so about 91 % of the degradable COD is converted (vs about 100 % in Paper 1); with fD 0.86 instead of 0.90 this gives 0.91 × 0.86 / 0.90 = 0.87, matching the modelled −13.1 % (about two thirds kinetics, one third fD).
+**Effect on Paper 1 results.** Pathway A unaffected (process water is soluble). Pathway B, Quebec, GWP: biomethane credit −94.0 → −81.7, hydrochar credit −27.6 → −33.3, with the digester heat change B loses about 6 kg CO2 eq/t; B's lead over A narrows from about 11 to about 5 kg CO2 eq/t. Direction unchanged.
+**Proposed limitation sentence for Paper 1 (revision).** "Pathway B uses BSM2 hydrolysis kinetics without the disintegration step, which overstates methane at 30 d HRT; with feedstock-specific kinetics (Fisgativa et al. 2020) methane decreases by 13 % and hydrochar increases by 21 % for food waste, narrowing the GWP advantage of Pathway B over Pathway A in Quebec from about 11 to about 5 kg CO2 eq/t without reversing it." To decide with supervisors.
+**Side observation.** Paper 2 hydrochar energy of B is not monotonic in HRT (594, 583, 615 MJ/t at 20, 30, 40 d), most likely the step-shaped response of the HTC surrogate to small digestate changes (see C0); sweeps will contain such jumps.
+
 ### C2. Digestate composition from ADM1: not done (2026-11-21)
 **Decision.** Keep the measured digestate coefficients (H/C, O/C, FC).
 **Why.** The user's earlier attempts to derive a clean digestate from ADM1 output failed.
