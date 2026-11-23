@@ -218,6 +218,20 @@ The small HRT sensitivity in Paper 1 is a model artifact. At 30 d, a steady-stat
 **Pending.** As-received moisture of sludge and manure (none in the code or usable in the dataset). Secondary figure found: lactating dairy cow manure about 88 % water (MWPS-18, cited in an Ohio administrative code appendix); the primary standard (ASABE D384.2) could not be checked. Sources for the COD and TS ranges to be added.
 **Code.** see commit "Design factors".
 
+### F7. Feedstock moisture: central values and ranges, sampled in the screening (2026-11-23)
+**Decision.** Feed moisture (% wet basis) is a natural feedstock property and is sampled within each feedstock's range (Morris factor `feed_WC`, position in the class range). Central values and ranges:
+
+| Feedstock | Central | Range | Basis |
+|---|---|---|---|
+| Food waste | 85 (Paper 1) | 74 to 90 | Zhang et al. 2007, Bioresour. Technol. 98, 929 |
+| OFMSW | 70 (Paper 1) | 50 to 92 | As-received OFMSW characterizations, strongly collection-dependent; 67 to 70 % in a one-year German study |
+| Sewage sludge (dewatered) | 78 | 71 to 85 | Mechanically dewatered sludges 71 to 85 % (Energies, MDPI, wastewater sludge characterization); 75 to 82 % typical (Brunel thesis); HTC studies at 74.9 and 77.2 % |
+| Dairy manure | 85 | 83 to 88 | Fresh manure 83 to 84 % (16 to 17 % TS, lab studies), 85.7 % as excreted (Cornell report), about 88 % (MWPS-18 via Ohio code); ASABE D384.2 not checked |
+
+The no-moisture entries in the code are thereby filled; sludge and manure now run. Screening: 20 factors, 420 samples, 4 feedstocks, 6,720 points.
+**To verify.** The sources are from web searches (abstracts and snippets); the full texts should be checked and cited properly before the paper.
+**Code.** see commit "Feed moisture".
+
 ---
 
 ## E. Open items

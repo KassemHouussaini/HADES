@@ -634,11 +634,18 @@ def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core,
         for fl, f in feeds.items():
             prm, x = map_sample(u, space, f["feedstock_type"], adm1_core)
             design = prm.pop("point", {})
+            feed = dict(f["feed"])
+            if "feed_WC" in x:
+                if "WC_range" not in f:
+                    raise ValueError(f"feedstock {fl}: feed_WC is sampled but no WC_range is given")
+                lo, up = f["WC_range"]
+                feed["WC"] = lo + x["feed_WC"] * (up - lo)
+                x = {**x, "feed_WC": feed["WC"]}
             for T in T_levels:
                 for RT in RT_levels:
                     for P in pathways:
                         pts.append(dict(point_id=f"{prefix}{sid:05d}_{fl}_T{T}_RT{RT}_{P}", sample_id=sid,
-                                        pathway=P, feed=f["feed"], feedstock_type=f["feedstock_type"],
+                                        pathway=P, feed=feed, feedstock_type=f["feedstock_type"],
                                         feedstock_label=fl, T=T, RT=RT, params=prm, x=x,
                                         **{**(extra or {}), **design}))
     return pts
@@ -694,6 +701,10 @@ def morris_indices(y, steps, names):
 # =============================================================================
 # PARAMETER SPACE: unit sample -> physical parameters of a point
 # =============================================================================
+# feedstock moisture: natural variability within the class range given per
+# feedstock (feeds[...]["WC_range"], % wet basis); kind "feedwc"
+FEED_MOISTURE_FACTOR = dict(name="feed_WC", kind="feedwc", range=(0.0, 1.0))
+
 # design variables screened with Morris (plant designer's choices; the main
 # sweep puts the ones that matter on a grid). kind "point": sets the point key.
 DESIGN_FACTORS = [
@@ -704,7 +715,7 @@ DESIGN_FACTORS = [
 ]
 
 
-def parameter_space(sb, hce, adm1_core, include_design=False):
+def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moisture=False):
     """Sampled parameters with their range. kind: ctx (SystemContext field),
     hi (heat_integration constant), bfeed (Pathway B degradability, range of
     the feedstock class), u (position 0-1 used as is), point (design variable
@@ -720,6 +731,8 @@ def parameter_space(sb, hce, adm1_core, include_design=False):
         sp.append(dict(name=k, kind="hi", range=getattr(hi, r)))
     if include_design:
         sp += [dict(d) for d in DESIGN_FACTORS]
+    if include_feed_moisture:
+        sp.append(dict(FEED_MOISTURE_FACTOR))
     return sp
 
 
@@ -732,6 +745,8 @@ def map_sample(u, space, feedstock_type, adm1_core):
             rng = cls.get(f"{s['name']}_range")
             v = float(cls[s["name"]]) if rng is None else rng[0] + float(ui) * (rng[1] - rng[0])
             bfeed[s["name"]] = v
+        elif s["kind"] == "feedwc":
+            v = float(ui)                     # position in the feedstock's WC_range (make_points)
         else:
             lo, up = s["range"]
             v = lo + float(ui) * (up - lo)

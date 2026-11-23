@@ -119,3 +119,16 @@ def test_design_factors_set_point_keys(se, sb):
         assert (p["HRT"], p["target_moisture_HTC"], p["COD_target"], p["TS_target"]) == (40.0, 0.90, 40.0, 0.12)
         assert "point" not in p["params"] and p["x"]["COD_target"] == 40.0
     assert len(se.parameter_space(sb, sb.hce, sb._adm1_core)) == len(space) - 4   # default: uncertainties only
+
+
+def test_feed_moisture_within_class_range(se, sb):
+    space = se.parameter_space(sb, sb.hce, sb._adm1_core, include_feed_moisture=True)
+    assert space[-1]["name"] == "feed_WC"
+    feeds = {"fw": dict(feedstock_type="food_waste", feed={"WC": 85.0}, WC_range=(74.0, 90.0)),
+             "ss": dict(feedstock_type="sewage_sludge", feed={"WC": 78.0}, WC_range=(71.0, 85.0))}
+    U = np.vstack([np.zeros(len(space)), np.ones(len(space))])
+    pts = se.make_points(U, feeds, [180], [60], ["A"], space, sb._adm1_core, "t")
+    got = {(p["sample_id"], p["feedstock_label"]): (p["feed"]["WC"], p["x"]["feed_WC"]) for p in pts}
+    assert got[(0, "fw")] == (74.0, 74.0) and got[(1, "fw")] == (90.0, 90.0)
+    assert got[(0, "ss")] == (71.0, 71.0) and got[(1, "ss")] == (85.0, 85.0)
+    assert feeds["fw"]["feed"]["WC"] == 85.0                     # input dict not mutated
