@@ -633,12 +633,14 @@ def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core,
     for sid, u in enumerate(samples):
         for fl, f in feeds.items():
             prm, x = map_sample(u, space, f["feedstock_type"], adm1_core)
+            design = prm.pop("point", {})
             for T in T_levels:
                 for RT in RT_levels:
                     for P in pathways:
                         pts.append(dict(point_id=f"{prefix}{sid:05d}_{fl}_T{T}_RT{RT}_{P}", sample_id=sid,
                                         pathway=P, feed=f["feed"], feedstock_type=f["feedstock_type"],
-                                        feedstock_label=fl, T=T, RT=RT, params=prm, x=x, **(extra or {})))
+                                        feedstock_label=fl, T=T, RT=RT, params=prm, x=x,
+                                        **{**(extra or {}), **design}))
     return pts
 
 
@@ -692,10 +694,21 @@ def morris_indices(y, steps, names):
 # =============================================================================
 # PARAMETER SPACE: unit sample -> physical parameters of a point
 # =============================================================================
-def parameter_space(sb, hce, adm1_core):
+# design variables screened with Morris (plant designer's choices; the main
+# sweep puts the ones that matter on a grid). kind "point": sets the point key.
+DESIGN_FACTORS = [
+    dict(name="HRT", kind="point", range=(20.0, 40.0)),                  # d
+    dict(name="target_moisture_HTC", kind="point", range=(0.75, 0.90)),  # surrogate training 71-95 %
+    dict(name="COD_target", kind="point", range=(5.0, 40.0)),            # kg COD/m3, Pathway A
+    dict(name="TS_target", kind="point", range=(0.05, 0.12)),            # Pathway B
+]
+
+
+def parameter_space(sb, hce, adm1_core, include_design=False):
     """Sampled parameters with their range. kind: ctx (SystemContext field),
     hi (heat_integration constant), bfeed (Pathway B degradability, range of
-    the feedstock class), u (position 0-1 used as is)."""
+    the feedstock class), u (position 0-1 used as is), point (design variable
+    of the point, only with include_design)."""
     hi = sb.hi
     sp = [dict(name="pw_ch4_multiplier", kind="ctx", range=sb.PW_CH4_MULTIPLIER_RANGE),
           dict(name="fD", kind="bfeed"), dict(name="k_hyd", kind="bfeed"), dict(name="f_sol", kind="bfeed"),
@@ -705,12 +718,14 @@ def parameter_space(sb, hce, adm1_core):
           dict(name="nox_conv", kind="ctx", range=hce.NOX_CONV_RANGE)]
     for k, r in sb.SWEEP_HI_PARAMS.items():
         sp.append(dict(name=k, kind="hi", range=getattr(hi, r)))
+    if include_design:
+        sp += [dict(d) for d in DESIGN_FACTORS]
     return sp
 
 
 def map_sample(u, space, feedstock_type, adm1_core):
     """Physical parameters of one point from a unit sample u (len(space))."""
-    prm, bfeed, hio, x = {}, {}, {}, {}
+    prm, bfeed, hio, x, pnt = {}, {}, {}, {}, {}
     cls = adm1_core.PATHWAY_B_FEED_PARAMS.get(feedstock_type, {})
     for ui, s in zip(u, space):
         if s["kind"] == "bfeed":
@@ -722,6 +737,8 @@ def map_sample(u, space, feedstock_type, adm1_core):
             v = lo + float(ui) * (up - lo)
             if s["kind"] == "hi":
                 hio[s["name"]] = v
+            elif s["kind"] == "point":
+                pnt[s["name"]] = v
             elif s["kind"] == "u":
                 prm[s["name"]] = v
             else:
@@ -729,4 +746,5 @@ def map_sample(u, space, feedstock_type, adm1_core):
         x[s["name"]] = v
     prm["b_feed_overrides"] = bfeed
     prm["hi_overrides"] = hio
+    prm["point"] = pnt
     return prm, x

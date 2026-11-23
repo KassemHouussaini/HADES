@@ -211,6 +211,13 @@ The small HRT sensitivity in Paper 1 is a model artifact. At 30 d, a steady-stat
 **Pending.** Sewage sludge (composition: median of 15 compositions from 9 studies in the HTC dataset) and dairy manure (one composition with VM/FC, manure type not stated, 2 studies only) need an as-received moisture with a source before they enter.
 **Code.** `notebooks/sweep.ipynb`.
 
+### F6. Design variables in the screening; sludge and manure compositions (2026-11-23)
+**Decision.** The Morris screening also includes four design variables as factors (19 in total, 400 samples, 3,200 points for food waste and OFMSW): HRT 20 to 40 d; HTC feed moisture target 0.75 to 0.90 (inside the surrogate training data, 71 to 95 % slurry moisture, 5th to 95th percentile); process-water COD to the digester 5 to 40 kg COD/m³ (Pathway A; range set by the author); digester feed solids 5 to 12 % TS (Pathway B; range set by the author). T and RT stay on a grid (surrogate steps), province and heat supply as categories. Design variables are screened for importance only; the main sweep puts those that matter on a grid.
+**Dilution logic (unchanged, as in the code).** A feed drier than a target gets water; a wetter feed is never dried. HTC reactor moisture = max(feed moisture, target); digester feed TS and process-water COD are diluted only when above the target. Exception: the Pathway B digestate (about 97 % water) is mechanically dewatered (centrifuge) to the HTC moisture target, with water added back if the cake is drier.
+**Compositions.** Sewage sludge: mean of 13 compositions from 9 studies in the HTC dataset (C 31.25, H 4.52, N 4.14, S 1.75, ash 40.26, VM 52.32, FC 7.42 % dry); two rows with 0.1 % ash (doi:10.1016/j.biombioe.2018.11.016) excluded as not sludge. Dairy manure: mean of 3 raw manure compositions from 2 studies (Belete et al. 2021, doi:10.1016/j.biortech.2021.125164; doi:10.1016/j.renene.2020.07.003) (C 37.80, H 5.03, N 2.37, S 0.47, ash 25.37 % dry; VM 60.77, FC 13.87 from the single row reporting VM/FC); the dataset's "manure" class also contains two Belete digestate rows (ash 44.8, 45.7 %), excluded.
+**Pending.** As-received moisture of sludge and manure (none in the code or usable in the dataset). Secondary figure found: lactating dairy cow manure about 88 % water (MWPS-18, cited in an Ohio administrative code appendix); the primary standard (ASABE D384.2) could not be checked. Sources for the COD and TS ranges to be added.
+**Code.** see commit "Design factors".
+
 ---
 
 ## E. Open items

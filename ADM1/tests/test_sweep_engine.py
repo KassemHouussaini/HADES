@@ -108,3 +108,14 @@ def test_engine_end_to_end_mock(tmp_path):
         own = [x for x in v["runs"] if x["heat"] == "own_biogas"][0]
         base = [x for x in v["runs"] if x["heat"] == "paper1"][0]
         assert own["biomethane"] < base["biomethane"]
+
+
+def test_design_factors_set_point_keys(se, sb):
+    space = se.parameter_space(sb, sb.hce, sb._adm1_core, include_design=True)
+    assert [d["name"] for d in space[-4:]] == ["HRT", "target_moisture_HTC", "COD_target", "TS_target"]
+    feeds = {"fw": dict(feedstock_type="food_waste", feed={})}
+    pts = se.make_points(np.ones((1, len(space))), feeds, [180], [60], ["A", "B"], space, sb._adm1_core, "t")
+    for p in pts:
+        assert (p["HRT"], p["target_moisture_HTC"], p["COD_target"], p["TS_target"]) == (40.0, 0.90, 40.0, 0.12)
+        assert "point" not in p["params"] and p["x"]["COD_target"] == 40.0
+    assert len(se.parameter_space(sb, sb.hce, sb._adm1_core)) == len(space) - 4   # default: uncertainties only
