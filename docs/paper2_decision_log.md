@@ -176,6 +176,17 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Range quality.** Sourced: press electricity, dryer heat, MC_char, eps_HR, NOx conversion, PW multiplier, Pathway B degradability, FC ratio. Model assumptions (to state in the paper): ambient temperature, separation temperature (60 to 80 °C, no citation in the code), dewatering temperature loss, digester loss fraction (0.2 checked against a wall-loss calculation), extra HTC loss (0 default, 0.4 reported by one design).
 **Code.** see commit "Sweep parameters".
 
+### F4. Sweep engine: in-memory builds, cached ADM1, precomputed unit scores (2026-11-23)
+**Decision.** Sweeps run through `ADM1/sweep_engine.py`. Workers build each run in memory (no Brightway writes) and only read ecoinvent; each point runs ADM1 once and is evaluated for every LCA context and heat configuration (ADM1 results cached by their exact inputs, caps recorded inside ADM1 replayed on a cache hit; HTC surrogate loaded once per worker). Impacts are the walk of the foreground times unit scores of the background activities and characterization factors of the foreground emissions, computed once per design (`precompute_scores`) and checked against a full Brightway LCA (`validate_point`, tolerance 0.01 %). Every point is saved to its own file (resumable). One thread per worker.
+**Why.** Profiling (mock dry run): ADM1 integration is 97 % of the run time (spin-up and main run about half each); everything else is under 1 s. Parallel Brightway runs on one SQLite project fail on concurrent writes, and a full LCA per worker needs about 1 GB of memory (likely cause of the earlier crashes above 8 workers). Measured: one process run 16 to 21 s, about 250 MB, single thread.
+**Check.** Mock run: frozen base-case values reproduced in every context, 2 ADM1 runs per point for 4 builds, identical caps on cached builds, totals equal category sums, resume skips finished points.
+**Code.** see commit "Sweep engine".
+
+### F5. Morris screening design (2026-11-23)
+**Decision.** 15 factors (PW methane multiplier; fD, k_hyd, f_sol; digestate FC position; heat-recovery effectiveness; hydrochar moisture after press; fuel N to NOx; ambient temperature; extra HTC loss; dewatering temperature loss; press electricity; dryer heat; separation temperature; digester loss fraction), uniform over their ranges, Morris one-at-a-time trajectories, r = 20, 4 levels (320 samples), paired A and B. Scenarios: food waste and OFMSW (Paper 1 compositions and moisture), T 180 and 260 °C, RT 60 min, contexts QC, ON, AB, heat configurations Paper 1, all natural gas, own biogas. 2,560 points, about 2 h on 12 workers. Importance: mu* (Campolongo et al. 2007) for A, B and A − B, scaled by the largest mu* per scenario and summarized by the median over scenarios.
+**Pending.** Sewage sludge (composition: median of 15 compositions from 9 studies in the HTC dataset) and dairy manure (one composition with VM/FC, manure type not stated, 2 studies only) need an as-received moisture with a source before they enter.
+**Code.** `notebooks/sweep.ipynb`.
+
 ---
 
 ## E. Open items

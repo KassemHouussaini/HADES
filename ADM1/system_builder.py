@@ -243,6 +243,9 @@ class SystemContext:
     # Pathway B: position (0-1) of the digestate fixed-carbon ratio in its
     # measured range (ad_characterization fc_ratio_range); None = central value
     u_fc: Optional[float] = None
+    # sweeps: foreground activities held in memory (sweep_engine.MemAct); the
+    # clean-up then iterates over these instead of the Brightway database
+    foreground_activities: Optional[list] = None
     # Heat supply of the three heat consumers (see HEAT_SUPPLY_DOC):
     # {"htc": ..., "dryer": ..., "ad": ...}, each "electricity", "own_biogas"
     # or a Brightway activity delivering heat in MJ. None or a missing key:
@@ -1417,7 +1420,8 @@ def _build_system(ctx: SystemContext,
         ISR_batch = ctx.ISR_batch
 
     # ── clear all foreground activities before rebuilding ────────
-    db = bd.Database(FOREGROUND_DB)
+    db = (ctx.foreground_activities if ctx.foreground_activities is not None
+          else bd.Database(FOREGROUND_DB))
     for act in db:
         for exc in list(act.exchanges()):
             if exc["type"] != "production":

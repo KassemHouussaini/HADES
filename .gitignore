@@ -17,3 +17,6 @@ venv/
 .env
 .DS_Store
 Thumbs.db
+
+# sweep outputs (large, regenerated from notebooks/sweep.ipynb)
+results/sweeps/
