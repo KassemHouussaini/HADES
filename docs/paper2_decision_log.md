@@ -15,6 +15,7 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 **Why.** Reviewers of Paper 1 must be able to reproduce the submitted results.
 **Code.** Tag `waste-management-submission`; `main` last commit 5f1743f.
 **Paper 1.** Unchanged.
+**Amendment (2026-11-23).** `main` received one bug-fix commit (2edbcde, B4): Pathway A batch mode and the `ADM1_MODE` option in `HADES.ipynb`. Continuous results, and so the article results, are unchanged; the tag still points to the submitted code.
 
 ### A2. One notebook for single runs, a separate one for sweeps (2026-11-22)
 **Decision.** `notebooks/HADES.ipynb` carries every Paper 2 option for a practitioner running one or two scenarios. Large simulation campaigns get a separate sweep notebook.
@@ -161,8 +162,9 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 ### B4. ADM1 mode selectable; Pathway A batch result fixed (2026-11-23)
 **Decision.** `HADES.ipynb` offers `ADM1_MODE`: "continuous" (default; full-scale digester at steady state, used for the LCA of a plant and for all sweeps) or "batch" (BMP-test simulation with inoculum and blank correction, for comparison with lab BMP data), with `BATCH_DAYS` and `ISR_BATCH`.
 **Bug found.** In batch mode, Pathway A recorded the raw test-bottle methane (inoculum included) instead of the blank-corrected value, and did not scale from the bottle to the FU. The bottle is filled at the substrate COD concentration over the whole liquid volume, inoculum included, so it holds more COD than the process water of the FU (base case 60.15 vs 27.46 kg). Base food waste: 17.83 kg CH4/t recorded (above the 6.86 kg theoretical maximum of the COD fed); corrected 4.69 kg CH4/t (239 mL CH4/g COD), against 5.20 in continuous mode. Pathway B batch was already correct (its bottle holds exactly the FU COD).
-**Scope.** Paper 1 results used continuous mode only and are not affected. The same bug is on `main` (Paper 1 code); the Streamlit app on `main` offers batch mode and gives wrong Pathway A results there. The PW-ADM1 validation figure (batch) normalizes by the COD loaded in the bottle and is correct.
-**Code.** see commit "ADM1 batch mode".
+**Scope.** Paper 1 results used continuous mode only and are not affected. The PW-ADM1 validation figure (batch) normalizes by the COD loaded in the bottle and is correct.
+**Paper 1 code.** The same fix and the `ADM1_MODE` option were applied to `main` at the user's request (commit 2edbcde; batch fix, notebook option and batch regression test only, no other Paper 2 change; 56 tests pass, frozen Paper 1 values unchanged). The submitted version remains under the tag `waste-management-submission` (5f1743f). See A1.
+**Code.** `paper2-dev` 7329c7b, `main` 2edbcde.
 
 ---
 
