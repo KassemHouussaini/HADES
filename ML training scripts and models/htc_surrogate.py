@@ -5,9 +5,16 @@ Models are trained by "train_htc_surrogate.py" on HTC_dataset_paper.xlsx
 hydrochar yield, HHV and C, H, N, S and ash contents; O is closed by
 difference.
 
-Checks: every input is compared with the 1st-99th percentile range of the
-training data (flag and in_training_range), negative predictions are clipped at 0 with a note, and
-C + H + N + S + ash > 100 % is flagged.
+Checks (applicability domain, two layers):
+  1. every input is compared with the 1st-99th percentile range of the
+     training data (in_training_range, domain_violations);
+  2. distance of the input point to its nearest training point in the
+     standardized joint input space (applicability_domain.py), compared with
+     D_T = mean + 2 sd of the nearest-neighbour distances between studies
+     (ad_knn_distance, ad_knn_threshold, in_domain_knn). Error rises with the
+     distance; beyond D_T the grouped-CV error is about 2.4 times higher.
+Negative predictions are clipped at 0 with a note, and C + H + N + S + ash >
+100 % is flagged.
 """
 import json, os
 import numpy as np
@@ -19,6 +26,27 @@ _DIR = os.path.join(_HERE, "htc_xgb_models")
 META = json.load(open(os.path.join(_DIR, "metadata.json")))
 feature_cols = META["features"]
 target_cols = list(META["targets"])
+_AD_PATH = os.path.join(_DIR, "applicability_domain.json")
+AD = None
+if os.path.exists(_AD_PATH):
+    AD = json.load(open(_AD_PATH))
+    _AD_Z = np.array([[np.nan if v is None else v for v in r] for r in AD["train_z"]], float)
+    _AD_MEAN, _AD_SD = np.array(AD["mean"], float), np.array(AD["sd"], float)
+
+
+def ad_distance(x):
+    """Distance of input dict x (feature -> value) to the nearest training
+    point, standardized, NaN-tolerant (applicability_domain.nn_distance)."""
+    z = (np.array([x[f] for f in AD["features"]], float) - _AD_MEAN) / _AD_SD
+    p = _AD_Z.shape[1]
+    common = ~np.isnan(_AD_Z) & ~np.isnan(z)
+    d2 = np.where(common, (_AD_Z - z) ** 2, 0.0).sum(1)
+    nc = common.sum(1)
+    d = np.sqrt(d2 * p / np.maximum(nc, 1))
+    d[nc < AD["min_common"]] = np.inf
+    return float(d.min())
+
+
 models = {}
 for _t, _m in META["targets"].items():
     models[_t] = XGBRegressor()
@@ -45,6 +73,10 @@ def HTC_parametric_ML(T, RT, WC, VM_feed, FC_feed,
             violations.append(f"{f}={v:.3g} outside training P1-P99 [{lo:.3g}, {hi:.3g}]")
     for v in violations:
         print(f"[HTC surrogate] ⚠️ EXTRAPOLATION {v}")
+    d_ad = ad_distance(x) if AD is not None else float("nan")
+    in_knn = (d_ad <= AD["threshold"]) if AD is not None else None
+    if in_knn is False:
+        print(f"[HTC surrogate] ⚠️ OUTSIDE JOINT DOMAIN: nearest-neighbour distance {d_ad:.2f} > D_T {AD['threshold']:.2f}")
 
     X = pd.DataFrame([[x[c] for c in feature_cols]], columns=feature_cols, dtype=float)
     raw = {t: float(models[t].predict(X)[0]) for t in target_cols}
@@ -74,6 +106,9 @@ def HTC_parametric_ML(T, RT, WC, VM_feed, FC_feed,
         "O_char (%)": O, "N_char (%)": N, "S_char (%)": S, "Ash_char (%)": Ash,
         "WC_feed (%)": WC,
         "in_training_range": len(violations) == 0,
+        "ad_knn_distance": d_ad,
+        "ad_knn_threshold": AD["threshold"] if AD is not None else None,
+        "in_domain_knn": in_knn,
         "domain_violations": "; ".join(violations),
         "mass_balance_ok": mass_balance_ok,
         "mass_balance_note": "; ".join(notes),

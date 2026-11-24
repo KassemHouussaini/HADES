@@ -76,3 +76,23 @@ def test_training_dataset_size():
     clean = pd.read_excel(os.path.join(ML_DIR, "HTC_dataset_paper.xlsx"), "data")
     assert len(clean) == 938 and clean["Ref"].nunique() == 122
     assert (pd.to_numeric(clean["temp(C)"], errors="coerce") <= 300).all()
+
+
+def test_joint_domain_check():
+    """Layer 2 of the applicability domain: nearest-neighbour distance in the
+    standardized input space vs D_T (mean + 2 sd of between-study NN distances)."""
+    import importlib.util, os, numpy as np, pandas as pd
+    d = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                     "ML training scripts and models")
+    spec = importlib.util.spec_from_file_location("htc_surrogate_ad_test", os.path.join(d, "htc_surrogate.py"))
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    assert m.AD is not None and 2.0 < m.AD["threshold"] < 3.0
+    x = pd.read_excel(os.path.join(d, "HTC_dataset_paper.xlsx"), "data")
+    row = x.dropna(subset=m.AD["features"]).iloc[0]
+    assert m.ad_distance({f: float(row[f]) for f in m.AD["features"]}) < 1e-6      # a training point
+    _, inv = m.HTC_parametric_ML(T=180, RT=60, WC=85, VM_feed=82.6, FC_feed=8.3, C_feed=38.25,
+                                 H_feed=5.47, N_feed=3.66, O_feed=43.82, S_feed=0.5, Ash_feed=9.1)
+    assert inv["in_domain_knn"] is True and inv["ad_knn_distance"] < inv["ad_knn_threshold"]
+    _, inv = m.HTC_parametric_ML(T=300, RT=1440, WC=50, VM_feed=40, FC_feed=0.5, C_feed=80,
+                                 H_feed=2, N_feed=12, O_feed=0, S_feed=1.5, Ash_feed=4.5)
+    assert inv["in_domain_knn"] is False and np.isfinite(inv["ad_knn_distance"])

@@ -1234,6 +1234,9 @@ def qa_checks(PATHWAY, inv, mb, ad_hi, CH4_mass, CO2_mass, MB, m_ref,
             flags.append(f"{k} = {vals[k]:.3f} outside training p1-p99 [{lo}, {hi_}]")
     if inv.get("in_training_range") is False:
         flags.append(f"HTC surrogate extrapolation: {inv.get('domain_violations', '')}")
+    if inv.get("in_domain_knn") is False:
+        flags.append(f"HTC surrogate outside joint domain: nearest-neighbour distance "
+                     f"{inv.get('ad_knn_distance', float('nan')):.2f} > D_T {inv.get('ad_knn_threshold', float('nan')):.2f}")
     if inv.get("mass_balance_note"):
         flags.append(f"HTC surrogate: {inv['mass_balance_note']}")
     if (inv.get("C_recovery_raw") or 0.0) > 1.0:

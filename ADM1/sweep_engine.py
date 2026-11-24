@@ -364,6 +364,8 @@ def result_row(point, context, heat_config, wt, inv, imp, missing, method_labels
         row[k] = wt.get(k)
     row["Y_char"] = inv.get("Y_char (%)")
     row["HHV_char"] = inv.get("HHV_char (MJ/kg)")
+    for k in ("in_training_range", "domain_violations", "ad_knn_distance", "in_domain_knn"):
+        row[k] = inv.get(k)
     row["missing_keys"] = ";".join(sorted(missing))
     for m, lab in method_labels.items():
         tot = float("nan") if missing else sum(imp[m].values())
