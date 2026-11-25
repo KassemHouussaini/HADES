@@ -132,3 +132,20 @@ def test_feed_moisture_within_class_range(se, sb):
     assert got[(0, "fw")] == (74.0, 74.0) and got[(1, "fw")] == (90.0, 90.0)
     assert got[(0, "ss")] == (71.0, 71.0) and got[(1, "ss")] == (85.0, 85.0)
     assert feeds["fw"]["feed"]["WC"] == 85.0                     # input dict not mutated
+
+
+def test_make_points_hrt_grid_pathway_b_only():
+    import importlib.util, os
+    import numpy as np
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("se_hrt", os.path.join(here, "sweep_engine.py"))
+    se = importlib.util.module_from_spec(spec); spec.loader.exec_module(se)
+    feeds = {"fw": dict(feedstock_type="food_waste", feed={"WC": 85.0})}
+    from types import SimpleNamespace
+    pts = se.make_points(np.zeros((2, 0)), feeds, [180], [60], ["A", "B"], [],
+                         SimpleNamespace(PATHWAY_B_FEED_PARAMS={}), "t",
+                         HRT_levels={"A": [30], "B": [20, 30, 40]})
+    assert len(pts) == 2 * (1 + 3)
+    assert sorted(p["HRT"] for p in pts if p["pathway"] == "B" and p["sample_id"] == 0) == [20, 30, 40]
+    assert all(p["HRT"] == 30 for p in pts if p["pathway"] == "A")
+    assert len({p["point_id"] for p in pts}) == len(pts)

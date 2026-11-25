@@ -637,10 +637,14 @@ def validate_point(point, context, heat_config, methods_by_label, project, ei_na
 # =============================================================================
 # DESIGNS
 # =============================================================================
-def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core, prefix, extra=None):
-    """Points for every unit sample x feedstock x T x RT x pathway; both
-    pathways share each sample (paired comparison). feeds: {label: dict(
-    feedstock_type=..., feed={WC, C_feed, ...})}."""
+def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core, prefix, extra=None,
+                HRT_levels=None):
+    """Points for every unit sample x feedstock x T x RT x pathway (x HRT);
+    both pathways share each sample (paired comparison). feeds: {label: dict(
+    feedstock_type=..., feed={WC, C_feed, ...})}. HRT_levels: None (HRT from
+    the sample or the default 30 d) or {pathway: [d, ...]}, e.g.
+    {"A": [30], "B": [20, 30, 40]}: Pathway A digests soluble process water,
+    so HRT is gridded for B only (F13)."""
     pts = []
     for sid, u in enumerate(samples):
         for fl, f in feeds.items():
@@ -656,10 +660,17 @@ def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core,
             for T in T_levels:
                 for RT in RT_levels:
                     for P in pathways:
-                        pts.append(dict(point_id=f"{prefix}{sid:05d}_{fl}_T{T}_RT{RT}_{P}", sample_id=sid,
-                                        pathway=P, feed=feed, feedstock_type=f["feedstock_type"],
-                                        feedstock_label=fl, T=T, RT=RT, params=prm, x=x,
-                                        **{**(extra or {}), **design}))
+                        hrts = [None] if HRT_levels is None else list(HRT_levels[P])
+                        for H in hrts:
+                            if H is not None and "HRT" in design:
+                                raise ValueError("HRT is both sampled and gridded")
+                            hd = {} if H is None else {"HRT": float(H)}
+                            tag = "" if H is None else f"_HRT{H:g}"
+                            pts.append(dict(point_id=f"{prefix}{sid:05d}_{fl}_T{T}_RT{RT}_{P}{tag}",
+                                            sample_id=sid, pathway=P, feed=feed,
+                                            feedstock_type=f["feedstock_type"], feedstock_label=fl,
+                                            T=T, RT=RT, params=prm, x=x,
+                                            **{**(extra or {}), **design, **hd}))
     return pts
 
 

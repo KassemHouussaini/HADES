@@ -290,13 +290,14 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 | Heat supply (Paper 1, all natural gas, own biogas) | Grid (no extra ADM1 runs) |
 | HTC temperature 180 / 220 / 240 °C | Grid |
 | HTC residence time 60 / 240 min | Grid |
-| HRT | Grid (user), 20 / 30 / 40 d proposed |
+| HRT | Grid for Pathway B only (user), 20 / 30 / 40 d proposed; Pathway A fixed at 30 d |
 | PW methane multiplier, fD, k_hyd, f_sol, digestate FC, preheat effectiveness, extra HTC loss and the other ranged parameters | Sampled (Latin hypercube; fixing factors saves no runs with LHS) |
 | HTC moisture target, COD target (A), digester TS (B) | Fixed (user): if varied, the result depends mainly on them (F9); values to settle |
 | Surrogate error | Not sampled for now |
 
 **Why.** F9: the A − B comparison was driven by feed moisture and the dilution targets; the targets are design choices with author-set ranges. Composition is knowable by a practitioner, so its variation shows whether a recommendation holds for a class and which property flips it.
-**Open.** HRT levels and whether Pathway A (soluble process water, C1b) needs the HRT grid; composition sources per class; fixed values of the three targets; sample size per cell.
+**HRT for B only (user, 2026-11-25).** Pathway A digests process water that is already soluble, so hydrolysis is never limiting and HRT barely changes its methane (C1b); gridding it for A would spend a third of the runs on an inactive variable. B (particulate feed, k_hyd 0.18 d⁻¹ for food waste) is HRT-sensitive (+8.3 % CH4 from 20 to 40 d, C1b). Size with 100 samples per cell: 4 feedstocks × 3 T × 2 RT × (1 A + 3 B) = 96 cells, about 9,600 points, about 19 h on 12 workers (resumable). Code: `make_points(..., HRT_levels={"A": [30], "B": [20, 30, 40]})`.
+**Open.** HRT levels (20 / 30 / 40 d to confirm); composition sources per class; fixed values of the three targets; sample size per cell.
 
 ---
 
