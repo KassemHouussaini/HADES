@@ -641,7 +641,9 @@ def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core,
                 HRT_levels=None):
     """Points for every unit sample x feedstock x T x RT x pathway (x HRT);
     both pathways share each sample (paired comparison). feeds: {label: dict(
-    feedstock_type=..., feed={WC, C_feed, ...})}. HRT_levels: None (HRT from
+    feedstock_type=..., feed={WC, C_feed, ...}, compositions=None)};
+    compositions: optional list (one per sample) of C_feed ... FC_feed dicts
+    (feedstock_sampler.sample) that replace the composition of `feed`. HRT_levels: None (HRT from
     the sample or the default 30 d) or {pathway: [d, ...]}, e.g.
     {"A": [30], "B": [20, 30, 40]}: Pathway A digests soluble process water,
     so HRT is gridded for B only (F13)."""
@@ -651,6 +653,12 @@ def make_points(samples, feeds, T_levels, RT_levels, pathways, space, adm1_core,
             prm, x = map_sample(u, space, f["feedstock_type"], adm1_core)
             design = prm.pop("point", {})
             feed = dict(f["feed"])
+            if f.get("compositions") is not None:      # one composition per sample (feedstock_sampler)
+                comps = f["compositions"]
+                if len(comps) < len(samples):
+                    raise ValueError(f"feedstock {fl}: {len(comps)} compositions for {len(samples)} samples")
+                feed.update(comps[sid])
+                x = {**x, **{f"comp_{k}": v for k, v in comps[sid].items()}}
             if "feed_WC" in x:
                 if "WC_range" not in f:
                     raise ValueError(f"feedstock {fl}: feed_WC is sampled but no WC_range is given")
