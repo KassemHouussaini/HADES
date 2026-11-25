@@ -301,6 +301,11 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **To check in the pilot.** Total ammonia N in the Pathway A digester at 25 kg COD/m³ (protein-rich feeds such as sludge) against inhibition thresholds (1.7 to 14 g N/L, Chen, Cheng & Creamer 2008, Bioresour. Technol. 99:4044).
 **Open.** HRT levels (20 / 30 / 40 d to confirm); composition sources per class; sample size per cell (100 proposed).
 
+### F14. Feedstock composition data: coverage and cleaning (proposed, 2026-11-25)
+**Finding.** Distinct compositions in the HTC training dataset after cleaning, one mean per study, % dry basis (median; min to max of study means). Food waste, 17 compositions, 13 studies: C 44.5 (36.2–53.9), H 6.2 (4.1–8.9), N 3.4 (1.7–7.0), S 0.2 (0–0.5), ash 9.1 (1.4–21.6), VM 76.4 (67.6–84.8), FC 11.4 (5.1–20.6). Sewage sludge, 17 compositions, 12 studies: C 35.4 (20.7–43.0), H 5.2 (1.6–5.9), N 4.5 (2.5–7.2), S 1.0 (0–1.7), ash 32.0 (13.6–60.9), VM 52.8 (36.8–78.5), FC 8.3 (2.0–12.7). Dairy manure, 4 compositions, 3 studies: C 36.8 (32.7–39.9), N 2.2 (1.4–2.7), ash 15.5 (9.2–30.3). "Solid waste" (OFMSW not confirmed), 3 compositions, 2 studies.
+**Proposed exclusions (to confirm).** Rows failing mass closure (O by difference below 5 %: one sludge row with ash 56.6 % and C 40.1 %); S above 5 % (one sludge row, 9.5 %); N below 0.05 % or C above 70 % (two solid-waste rows); a food waste row identical to another of the same study except N 10.0 instead of 1.0 (doi:10.1016/j.biortech.2021.126395); an ash series of one solid-waste sample in 1 % steps (doi:10.1016/j.biortech.2015.01.118, base row kept); non-sludge and digestate rows as in F6. Flagged, kept: food waste N 9.7 % (doi:10.1016/j.biortech.2020.124410); cow dung O 50.9 % by difference (doi:10.1016/j.jenvman.2022.116854).
+**Reading.** Food waste and sewage sludge are covered well enough to resample; dairy manure and OFMSW need literature compositions before the main sweep.
+
 ---
 
 ## E. Open items
