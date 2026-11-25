@@ -728,6 +728,13 @@ def morris_indices(y, steps, names):
 # feedstock (feeds[...]["WC_range"], % wet basis); kind "feedwc"
 FEED_MOISTURE_FACTOR = dict(name="feed_WC", kind="feedwc", range=(0.0, 1.0))
 
+# fixed design of the main sweep (user decision, decision log F13); pass as
+# make_points(..., extra=MAIN_SWEEP_FIXED_DESIGN)
+MAIN_SWEEP_FIXED_DESIGN = dict(target_moisture_HTC=0.85,   # HTC slurry moisture
+                               COD_target=25.0,           # kg COD/m3, Pathway A digester feed
+                               TS_target=0.10)            # Pathway B digester feed TS
+MAIN_SWEEP_HRT_LEVELS = {"A": [30], "B": [20, 30, 40]}   # d (F13)
+
 # design variables screened with Morris (plant designer's choices; the main
 # sweep puts the ones that matter on a grid). kind "point": sets the point key.
 DESIGN_FACTORS = [

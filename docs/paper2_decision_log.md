@@ -292,12 +292,14 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 | HTC residence time 60 / 240 min | Grid |
 | HRT | Grid for Pathway B only (user), 20 / 30 / 40 d proposed; Pathway A fixed at 30 d |
 | PW methane multiplier, fD, k_hyd, f_sol, digestate FC, preheat effectiveness, extra HTC loss and the other ranged parameters | Sampled (Latin hypercube; fixing factors saves no runs with LHS) |
-| HTC moisture target, COD target (A), digester TS (B) | Fixed (user): if varied, the result depends mainly on them (F9); values to settle |
+| HTC moisture target, COD target (A), digester TS (B) | Fixed (user): 0.85, 25 kg COD/m³, 10 % TS |
 | Surrogate error | Not sampled for now |
 
 **Why.** F9: the A − B comparison was driven by feed moisture and the dilution targets; the targets are design choices with author-set ranges. Composition is knowable by a practitioner, so its variation shows whether a recommendation holds for a class and which property flips it.
 **HRT for B only (user, 2026-11-25).** Pathway A digests process water that is already soluble, so hydrolysis is never limiting and HRT barely changes its methane (C1b); gridding it for A would spend a third of the runs on an inactive variable. B (particulate feed, k_hyd 0.18 d⁻¹ for food waste) is HRT-sensitive (+8.3 % CH4 from 20 to 40 d, C1b). Size with 100 samples per cell: 4 feedstocks × 3 T × 2 RT × (1 A + 3 B) = 96 cells, about 9,600 points, about 19 h on 12 workers (resumable). Code: `make_points(..., HRT_levels={"A": [30], "B": [20, 30, 40]})`.
-**Open.** HRT levels (20 / 30 / 40 d to confirm); composition sources per class; fixed values of the three targets; sample size per cell.
+**Fixed design values (user, 2026-11-25).** HTC moisture 0.85 (inside the surrogate training data: median 0.90, 5th to 95th percentile 0.71 to 0.95); COD of the Pathway A digester feed 25 kg COD/m³ (code default was 10, unsourced); Pathway B digester feed 10 % TS (wet digestion; code default was 8 %). Only feeds above a target are diluted (F6). Gridding them was considered and rejected for the main sweep: less dilution always favours the pathway concerned (F10), so a grid shows a known monotone trend, includes designs beyond process limits, makes the A vs B pairing combinatorial, and costs about 4 times the runs. A separate design sensitivity run (about 1,000 points) will vary the process limits (ammonia threshold, TS limit, moisture) one at a time. Values remain to be supported by literature (user's research). Code: `sweep_engine.MAIN_SWEEP_FIXED_DESIGN`, `MAIN_SWEEP_HRT_LEVELS`.
+**To check in the pilot.** Total ammonia N in the Pathway A digester at 25 kg COD/m³ (protein-rich feeds such as sludge) against inhibition thresholds (1.7 to 14 g N/L, Chen, Cheng & Creamer 2008, Bioresour. Technol. 99:4044).
+**Open.** HRT levels (20 / 30 / 40 d to confirm); composition sources per class; sample size per cell (100 proposed).
 
 ---
 
