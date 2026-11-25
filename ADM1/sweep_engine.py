@@ -292,7 +292,11 @@ def build_point(sb, ei, bios, rc, point, heat_config, ml_module=ML_MODULE, quiet
         wt, _, adm1_out, _, inv = sb.build_system(
             ctx, ml_module=ml_module, adm1_mode="continuous", adm1_HRT_days=HRT,
             adm1_ss_state=ss, ISR_batch=point.get("ISR_batch", 2.0), TS_target=TS)
-    wt["_pH"] = (adm1_out.get("ss_state") or {}).get("pH")
+    _ss = adm1_out.get("ss_state") or {}
+    wt["_pH"] = _ss.get("pH")
+    # digester ammonia (kmol N/m3 x 14 = g N/L): total inorganic N and free NH3
+    wt["_TAN_gN_L"] = None if _ss.get("S_IN") is None else 14.0 * float(_ss["S_IN"])
+    wt["_NH3_free_gN_L"] = None if _ss.get("S_nh3") is None else 14.0 * float(_ss["S_nh3"])
     return wt, inv
 
 
@@ -360,7 +364,8 @@ META_KEYS = ["CH4_mass_AD", "biomethane_m3", "MJ_hydrochar", "HC_dry_yield", "PW
              "heat_demand_htc_MJ", "heat_demand_dryer_MJ", "heat_demand_ad_MJ",
              "heat_shortfall_htc_MJ", "heat_shortfall_dryer_MJ", "heat_shortfall_ad_MJ",
              "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd",
-             "n_caps_correlation", "n_caps_design", "caps_active", "qa_flags", "_pH"]
+             "n_caps_correlation", "n_caps_design", "caps_active", "qa_flags", "_pH",
+             "_TAN_gN_L", "_NH3_free_gN_L"]
 
 
 def result_row(point, context, heat_config, wt, inv, imp, missing, method_labels):

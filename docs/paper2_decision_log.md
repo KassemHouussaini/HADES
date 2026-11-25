@@ -339,6 +339,13 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **Paper 1.** Unchanged.
 **Methods text.** "Feedstock compositions were sampled within class-specific ranges in additive log-ratio space (Aitchison, 1986), with the correlation structure estimated from measured compositions in the HTC training dataset, so that every sampled composition closes to 100 % and preserves the co-variation of carbon, hydrogen and ash observed in real feedstocks."
 
+### F17. Main sweep notebook (2026-11-25)
+**Decision.** `notebooks/main_sweep.ipynb` runs the F13 design; `notebooks/sweep.ipynb` stays the Morris screening (morris_v2 reproducible). Grid: 4 feedstocks, 11 contexts (10 provinces and Yukon; NT, NU excluded, F11), 3 heat supplies, T 180/220/240 °C, RT 60/240 min, HRT 20/30/40 d for B and 30 d for A. Latin hypercube, N = 100 samples per cell, seed 20261125, 15 sampled factors (all ranged parameters of F3 except ambient temperature, plus feed moisture in the F15 class range); one composition per sample from `feedstock_sampler` (F16); fixed design from `MAIN_SWEEP_FIXED_DESIGN`. 9,600 points (2,400 A, 7,200 B), each scored for 11 × 3 = 33 contexts and heat supplies (316,800 evaluations), about 19 h on 12 workers.
+**Pilot.** The first 2 samples of the design (192 points), run first and kept by the full run. Step 6 checks failures, missing unit scores, binding caps, surrogate domain flags, and digester ammonia and pH; total ammonia N and free NH3 (g N/L) are now recorded in every sweep row (`_TAN_gN_L`, `_NH3_free_gN_L`).
+**Results cell.** Pairs each B point (three HRTs) with the A point of the same sample, feedstock, T and RT; share of samples where A has the lower impact by feedstock × heat supply × province, then by T, RT and HRT; pairs saved to `pairs.csv`.
+**Check (mock background, no ecoinvent).** Design cell builds the 9,600 points; sample 0 at 220 °C, 60 min, food waste and sewage sludge, A and B at HRT 20 and 30 d, built and scored for ON and AB × 3 heat supplies without error. Pathway A sludge digester: 2.4 g N/L total ammonia, 0.06 g N/L free NH3, pH 7.3, at the low end of reported inhibition thresholds (1.7 to 14 g N/L, Chen, Cheng & Creamer 2008); food waste A 1.3 g N/L. A sampled food waste composition triggered the ADM1 lipid fraction cap (0.49 → 0.40): to count in the pilot.
+**Paper 1.** Unchanged.
+
 ---
 
 ## E. Open items
