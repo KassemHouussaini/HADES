@@ -2118,7 +2118,8 @@ def _build_system(ctx: SystemContext,
     waste_treatment["C_recovery_raw"] = inv.get("C_recovery_raw")
     for _k in ("NOx_comb_kg", "SO2_comb_kg", "PM_comb_kg", "NOx_capped", "SO2_capped",
                "PM_capped", "NOx_uncapped_mgNm3", "SO2_uncapped_mgNm3", "PM_uncapped_mgNm3",
-               "V_fluegas_Nm3", "ash_kg", "CO2_bio_kg"):
+               "V_fluegas_Nm3", "ash_kg", "CO2_bio_kg",
+               "NOx_removed_kg", "SO2_removed_kg", "PM_removed_kg"):
         _v = q_enduse[_k]
         waste_treatment[f"enduse_{_k}"] = bool(_v) if isinstance(_v, (bool, np.bool_)) else float(_v)
     waste_treatment["pw_clamped_elements"] = _pw_clamped if PATHWAY == "A" else ""

@@ -136,3 +136,18 @@ def test_heat_mix_shares_switch(sb, hce):
     amounts = {e["input"]: e["amount"] for e in mix.ex}
     assert sum(amounts.values()) == pytest.approx(1.0, rel=1e-12)       # renormalized to 1 MJ
     assert amounts["act_lpg_ngl"] == pytest.approx(2.9 / 301.5, rel=1e-9)
+
+
+def test_removed_mass_is_uncontrolled_minus_emitted(hce, monkeypatch):
+    q = hce.compute_enduse_quantities(INV, 100.0)
+    assert q["SO2_removed_kg"] == pytest.approx(q["SO2_kg"] - q["SO2_comb_kg"])
+    assert q["NOx_removed_kg"] == pytest.approx(q["NOx_kg"] - q["NOx_comb_kg"])
+    assert q["PM_removed_kg"] == pytest.approx(q["PM_uncapped_kg"] - q["PM_comb_kg"])
+    assert min(q["SO2_removed_kg"], q["NOx_removed_kg"], q["PM_removed_kg"]) >= 0.0
+    # below the limits (a clean fuel) nothing is removed
+    clean = dict(INV, **{"S_char (%)": 0.0, "N_char (%)": 0.0, "Ash_char (%)": 0.0})
+    q0 = hce.compute_enduse_quantities(clean, 100.0, nox_conv=hce.NOX_CONV_RANGE[0])
+    assert q0["SO2_removed_kg"] == 0.0 and q0["NOx_removed_kg"] == 0.0 and q0["PM_removed_kg"] == 0.0
+    monkeypatch.setattr(hce, "ELV_CAP_ENABLED", False)
+    q1 = hce.compute_enduse_quantities(INV, 100.0)
+    assert q1["SO2_removed_kg"] == q1["NOx_removed_kg"] == q1["PM_removed_kg"] == 0.0

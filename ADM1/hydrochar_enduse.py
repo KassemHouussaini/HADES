@@ -316,6 +316,10 @@ def compute_enduse_quantities(inv, HC_dry_mass_kg, nox_conv=NOX_CONV_CENTRAL):
         SO2_per_MJ=per_MJ(SO2_comb_kg), NOx_per_MJ=per_MJ(NOx_comb_kg),
         CO2_bio_per_MJ=per_MJ(CO2_bio_kg), Ash_char_pct=Ash, PM_scale=PM_scale,
         V_fluegas_Nm3=V_fg_Nm3, NOx_comb_kg=NOx_comb_kg, SO2_comb_kg=SO2_comb_kg,
+        # mass a permitted boiler must remove to meet the limits (uncontrolled
+        # minus emitted); recorded only, no burden inventoried (decision log F19)
+        NOx_removed_kg=max(0.0, NOx_kg - NOx_comb_kg), SO2_removed_kg=max(0.0, SO2_kg - SO2_comb_kg),
+        PM_removed_kg=max(0.0, PM_uncapped_kg - PM_comb_kg),
         PM_comb_kg=PM_comb_kg, PM_uncapped_kg=PM_uncapped_kg,
         NOx_uncapped_mgNm3=_conc(NOx_kg), SO2_uncapped_mgNm3=_conc(SO2_kg),
         PM_uncapped_mgNm3=_conc(PM_uncapped_kg),

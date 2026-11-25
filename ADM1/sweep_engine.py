@@ -365,7 +365,11 @@ META_KEYS = ["CH4_mass_AD", "biomethane_m3", "MJ_hydrochar", "HC_dry_yield", "PW
              "heat_shortfall_htc_MJ", "heat_shortfall_dryer_MJ", "heat_shortfall_ad_MJ",
              "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd",
              "n_caps_correlation", "n_caps_design", "caps_active", "qa_flags", "_pH",
-             "_TAN_gN_L", "_NH3_free_gN_L"]
+             "_TAN_gN_L", "_NH3_free_gN_L",
+             # hydrochar boiler: emitted and removed (uncontrolled minus emitted) per FU, kg (F19)
+             "HC_dry_mass_kg", "enduse_V_fluegas_Nm3",
+             "enduse_SO2_comb_kg", "enduse_NOx_comb_kg", "enduse_PM_comb_kg",
+             "enduse_SO2_removed_kg", "enduse_NOx_removed_kg", "enduse_PM_removed_kg"]
 
 
 def result_row(point, context, heat_config, wt, inv, imp, missing, method_labels):
