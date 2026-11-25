@@ -276,6 +276,26 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **Code.** `system_builder.plan_heat_supply(..., heat_per_MJ_CH4)`, `SystemContext.own_biogas_heat_eff`, sweep_engine `make_context`. Tests: `tests/test_heat_supply.py::test_own_biogas_heat_efficiency`.
 **Paper 1.** Unchanged (default 1.0; 127 tests pass, frozen regression unchanged).
 
+
+### F13. Main sweep design: what is gridded, sampled and fixed (2026-11-25)
+**Decision (user).** Paper 2 is a decision map: probability that A beats B by feedstock class, province and heat supply, break-even conditions, and the drivers. LCA only (no economics for now); surrogate error not sampled until the supervisor meeting (F2, C0). Feedstocks are no longer fixed compositions: composition varies within each class.
+**Rule.** Grid what the reader of the guidebook knows or chooses; sample what is uncertain or varies within a class; fix design choices that would otherwise dominate the result.
+| Variable | Treatment |
+|---|---|
+| Feedstock class (food waste, OFMSW, sewage sludge, dairy manure) | Grid |
+| Composition within class | Sampled: real measured compositions, equal weight per study (sources to settle) |
+| Feed moisture | Sampled within the class range (F7) |
+| Province (10) | Grid (no extra ADM1 runs, F4) |
+| Heat supply (Paper 1, all natural gas, own biogas) | Grid (no extra ADM1 runs) |
+| HTC temperature 180 / 220 / 240 °C | Grid |
+| HTC residence time 60 / 240 min | Grid |
+| HRT | Grid (user), 20 / 30 / 40 d proposed |
+| PW methane multiplier, fD, k_hyd, f_sol, digestate FC, preheat effectiveness, extra HTC loss and the other ranged parameters | Sampled (Latin hypercube; fixing factors saves no runs with LHS) |
+| HTC moisture target, COD target (A), digester TS (B) | Fixed (user): if varied, the result depends mainly on them (F9); values to settle |
+| Surrogate error | Not sampled for now |
+**Why.** F9: the A − B comparison was driven by feed moisture and the dilution targets; the targets are design choices with author-set ranges. Composition is knowable by a practitioner, so its variation shows whether a recommendation holds for a class and which property flips it.
+**Open.** HRT levels and whether Pathway A (soluble process water, C1b) needs the HRT grid; composition sources per class; fixed values of the three targets; sample size per cell.
+
 ---
 
 ## E. Open items
