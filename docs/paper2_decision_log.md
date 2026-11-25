@@ -306,6 +306,25 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **Proposed exclusions (to confirm).** Rows failing mass closure (O by difference below 5 %: one sludge row with ash 56.6 % and C 40.1 %); S above 5 % (one sludge row, 9.5 %); N below 0.05 % or C above 70 % (two solid-waste rows); a food waste row identical to another of the same study except N 10.0 instead of 1.0 (doi:10.1016/j.biortech.2021.126395); an ash series of one solid-waste sample in 1 % steps (doi:10.1016/j.biortech.2015.01.118, base row kept); non-sludge and digestate rows as in F6. Flagged, kept: food waste N 9.7 % (doi:10.1016/j.biortech.2020.124410); cow dung O 50.9 % by difference (doi:10.1016/j.jenvman.2022.116854).
 **Reading.** Food waste and sewage sludge are covered well enough to resample; dairy manure and OFMSW need literature compositions before the main sweep.
 
+### F15. Feedstock input ranges for the main sweep (2026-11-25)
+**Decision (user).** Ranges and central values per feedstock, % dry basis unless stated, synthesized from the user's literature table, the food waste data article table (Table 3, n up to 167; citation to add) and the HTC dataset (F14). Sewage sludge is raw mixed sludge (primary + waste activated), not primary only, undigested; it enters as dewatered cake.
+
+| Input | Food waste | Sewage sludge (raw mixed) | Dairy manure | OFMSW (source separated) |
+|---|---|---|---|---|
+| Moisture (% wb) | 70–90 (80) | 70–85 (78) | 82–90 (86) | 65–80 (73) |
+| C | 37–54 (47) | 28–45 (35) | 33–45 (40) | 42–52 (47) |
+| H | 4.5–8.0 (6.6) | 4.0–7.0 (5.3) | 4.5–6.0 (5.3) | 5.5–7.0 (6.3) |
+| N | 1.7–6.0 (2.8) | 3.0–7.5 (4.8) | 1.4–3.0 (2.3) | 2.0–3.8 (2.8) |
+| S | 0.05–0.6 (0.25) | 0.5–1.7 (1.0) | 0.2–0.6 (0.4) | 0.1–0.4 (0.25) |
+| Ash | 2–15 (8) | 18–42 (30) | 9–25 (16) | 5–25 (12) |
+| VM | 68–85 (79) | 50–75 (62) | 60–77 (69) | 65–82 (75) |
+| FC | 5–21 (13) | 3–13 (8) | 11–18 (15) | 8–24 (13) |
+| O by difference (result, not sampled) | about 30–44 (37) | about 15–30 (24) | about 28–42 (36) | about 28–40 (32) |
+
+**Use.** Marginals of a log-ratio (Aitchison) composition sampler; correlations between elements from the real compositions of each class (pooled classes for manure and OFMSW). VM and FC are sampled as the FC/(VM+FC) ratio so that VM + FC + ash = 100. Sludge above 45 % ash (likely digested) is outside the class.
+**Synthesis choices.** Food waste: centrals of C, N, O and moisture follow the data article (median C 48.2, N 2.6, O 38.8, TS 20 %); ash widened to 15 % (article Q3 12.7, HTC dataset median 9.1). Sludge: ash widened from 20–40 to 18–42 for waste-activated-rich sludges. Manure: C lower bound 33 and ash lower bound 9 from the HTC dataset (cow dung). OFMSW: user's table only.
+**Not changed.** Pathway B degradability and digestate FC ratio per class (C1, F3). OFMSW still uses the food waste values (fD 0.80–0.90), which likely overstates degradability for source-separated OFMSW containing garden waste (to revisit).
+
 ---
 
 ## E. Open items
