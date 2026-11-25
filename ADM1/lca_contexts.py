@@ -29,6 +29,7 @@ Usage
 """
 
 import copy
+import csv
 import importlib.util
 import os
 
@@ -62,6 +63,28 @@ _NRCAN = (hce.REGIONAL_HEAT_MIX_SOURCE + ", electricity, other fuels"
           + ("" if hce.INCLUDE_REFINERY_FUELS else ", still gas and petroleum coke") + " excluded, renormalized")
 
 
+# Ambient temperature per province: annual daily-average air temperature,
+# ECCC Canadian Climate Normals 1991-2020, station of the largest city
+# (data/eccc_normals_1991_2020_annual_mean_T.csv, downloaded from
+# climate.weather.gc.ca/climate_normals, bulk download, 2026-11-25). Used as
+# heat_integration.T_AMB_C (raw feed, tap water, outside of the digester).
+# Below T_AMB_MIN_C a liquid feed or water main cannot be at the air
+# temperature: those presets carry the value but ambient_overrides() refuses
+# them.
+AMBIENT_CSV = os.path.join(_HERE, "data", "eccc_normals_1991_2020_annual_mean_T.csv")
+AMBIENT_SOURCE = ("ECCC Canadian Climate Normals 1991-2020, annual daily-average "
+                  "temperature, station of the largest city")
+T_AMB_MIN_C = 0.0
+
+
+def _read_ambient(path=AMBIENT_CSV):
+    with open(path, newline="", encoding="utf-8") as f:
+        return {r["province"]: r for r in csv.DictReader(f)}
+
+
+_AMBIENT = _read_ambient()
+
+
 def _preset(code, eic, name, region):
     note = ""
     if region == "ATL":
@@ -72,7 +95,10 @@ def _preset(code, eic, name, region):
         key=code, name=name, location_country="CA", location_province=code,
         location_code=eic, location_priority=[eic, "CA", "RoW", "GLO"],
         heat_mix_shares=region, heat_mix_source=_NRCAN + f" (region {region})",
-        biomethane_use="heat", ng_heat="boilers_furnaces", note=note)
+        biomethane_use="heat", ng_heat="boilers_furnaces", note=note,
+        T_amb_C=float(_AMBIENT[code]["T_annual_mean_C"]),
+        T_amb_source=f"{AMBIENT_SOURCE}: {_AMBIENT[code]['eccc_location_name']} "
+                     f"(climate IDs {_AMBIENT[code]['climate_ids']}, code {_AMBIENT[code]['normals_code']})")
 
 
 PRESETS = {code: _preset(code, *v) for code, v in _PROVINCES.items()}
@@ -84,7 +110,8 @@ PRESETS["QC_PAPER1"] = dict(
     heat_mix_shares=None,
     heat_mix_source=("Whitmore and Pineau (2026), Etat de l'energie au Quebec 2026, "
                      "Graphique 25 (industry, 2023), electricity excluded, renormalized"),
-    biomethane_use="heat", ng_heat="market", note="Paper 1 case study configuration.")
+    biomethane_use="heat", ng_heat="market", note="Paper 1 case study configuration.",
+    T_amb_C=None, T_amb_source="Paper 1 model default (heat_integration.T_AMB_C)")
 
 DEFAULT_PRESET = "QC_PAPER1"
 
@@ -127,3 +154,17 @@ def ctx_kwargs(preset):
                 location_code=preset["location_code"],
                 location_priority=list(preset["location_priority"]),
                 heat_mix_shares=preset["heat_mix_shares"])
+
+
+def ambient_overrides(preset):
+    """{"T_AMB_C": value} for SystemContext.hi_overrides, from the preset's
+    climate normal; {} for QC_PAPER1 (Paper 1 default kept). Raises for a
+    preset below T_AMB_MIN_C (Northwest Territories, Nunavut)."""
+    t = preset.get("T_amb_C")
+    if t is None:
+        return {}
+    if t < T_AMB_MIN_C:
+        raise ValueError(f"[ambient] {preset['key']}: annual mean air temperature {t} C is below "
+                         f"{T_AMB_MIN_C} C and cannot stand for the temperature of the liquid feed "
+                         f"and tap water; set T_AMB_C explicitly")
+    return {"T_AMB_C": float(t)}

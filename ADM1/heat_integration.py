@@ -84,9 +84,12 @@ import math
 CP_KJ_PER_KG_K = 4.18
 
 # Ambient temperature (C): raw feed, tap water and outside of the digester.
-# Model default; sensitivity range 5-20 C.
+# Model default 10 C (Paper 1). Paper 2 province presets set it to the
+# province's 1991-2020 annual mean (lca_contexts.ambient_overrides), 2.4 to
+# 10.5 C for the ten provinces. Allowed range 0-20 C (lower bound lowered
+# from 5 C so that the Prairie provinces fit).
 T_AMB_C = 10.0
-T_AMB_RANGE_C = (5.0, 20.0)
+T_AMB_RANGE_C = (0.0, 20.0)
 
 # Mesophilic digester temperature; must equal ADM1 T_op (checked by
 # system_builder at import).

@@ -79,6 +79,10 @@ def _load(name, fname):
     return mod
 
 
+def _lcx():
+    return _load("lca_contexts", "lca_contexts.py")
+
+
 def key_str(act):
     """'database|code' of a Brightway activity or flow."""
     k = act.key
@@ -238,6 +242,12 @@ def make_context(sb, ei, bios, rc, point, heat_config, fg):
     feed.setdefault("O_feed", 100 - sum(feed[k] for k in ("C_feed", "H_feed", "N_feed", "S_feed", "Ash_feed")))
     prm = point.get("params", {})
     hs, backup = heat_supply_for(heat_config, rc["bg"])
+    # ambient temperature: a sampled T_AMB_C wins; otherwise the province's
+    # climate normal (point["ambient"] = "province", default) or the model
+    # default 10 C ("default")
+    hio = dict(prm.get("hi_overrides") or {})
+    if "T_AMB_C" not in hio and point.get("ambient", "province") == "province":
+        hio.update(_lcx().ambient_overrides(rc["preset"]))
     kw = dict(
         ei=ei, bios=bios, FOREGROUND_DB=FG_DB, **rc["bg"], co2_air=rc["co2_air"], co_air=rc["co_air"], **fg,
         PATHWAY=point["pathway"], m_feedstock=1000.0, default_params=feed,
@@ -251,11 +261,11 @@ def make_context(sb, ei, bios, rc, point, heat_config, fg):
         pw_ch4_multiplier=prm.get("pw_ch4_multiplier", 1.0),
         heat_supply=hs, heat_backup=backup,
         heat_mix_components_qc=rc["heat_mix"], ng_heat_components=rc["ng_comp"], ash_disposal=rc["ash"],
-        hi_overrides=prm.get("hi_overrides") or None, u_fc=prm.get("u_fc"),
+        hi_overrides=hio or None, u_fc=prm.get("u_fc"),
         foreground_activities=list(fg.values()),
         **sb_ctx_location(rc),
     )
-    for k in ("eps_HR", "nox_conv"):
+    for k in ("eps_HR", "nox_conv", "own_biogas_heat_eff"):
         if k in prm:
             kw[k] = prm[k]
     return sb.SystemContext(**kw)
@@ -346,7 +356,7 @@ def background_keys(wt):
 # RESULT ROW
 # =============================================================================
 META_KEYS = ["CH4_mass_AD", "biomethane_m3", "MJ_hydrochar", "HC_dry_yield", "PW_yield",
-             "E_HTC_elec_kWh", "E_dryer_heat_kWh", "Q_heat_AD_MJ", "CH4_own_use_MJ",
+             "E_HTC_elec_kWh", "E_dryer_heat_kWh", "Q_heat_AD_MJ", "CH4_own_use_MJ", "own_biogas_heat_eff",
              "heat_demand_htc_MJ", "heat_demand_dryer_MJ", "heat_demand_ad_MJ",
              "heat_shortfall_htc_MJ", "heat_shortfall_dryer_MJ", "heat_shortfall_ad_MJ",
              "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd",
@@ -717,7 +727,8 @@ DESIGN_FACTORS = [
 ]
 
 
-def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moisture=False):
+def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moisture=False,
+                    exclude=()):
     """Sampled parameters with their range. kind: ctx (SystemContext field),
     hi (heat_integration constant), bfeed (Pathway B degradability, range of
     the feedstock class), u (position 0-1 used as is), point (design variable
@@ -735,7 +746,10 @@ def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moist
         sp += [dict(d) for d in DESIGN_FACTORS]
     if include_feed_moisture:
         sp.append(dict(FEED_MOISTURE_FACTOR))
-    return sp
+    unknown = set(exclude) - {s["name"] for s in sp}
+    if unknown:
+        raise ValueError(f"[parameter_space] cannot exclude unknown factor(s) {sorted(unknown)}")
+    return [s for s in sp if s["name"] not in set(exclude)]
 
 
 def map_sample(u, space, feedstock_type, adm1_core):

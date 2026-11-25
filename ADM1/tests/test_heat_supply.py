@@ -51,3 +51,18 @@ def test_resolve_defaults_and_errors(sb):
         ctx.heat_supply = bad
         with pytest.raises(ValueError):
             sb.resolve_heat_sources(ctx)
+
+
+def test_own_biogas_heat_efficiency(sb):
+    # 0.9 MJ heat per MJ methane: 100 MJ CH4 cover 90 MJ, burned fuel 100 MJ
+    elec, ng, bio = _acts()
+    plan, used, short = sb.plan_heat_supply({"ad": "own_biogas", "htc": ng, "dryer": elec},
+                                            {"ad": 120.0, "htc": 0.0, "dryer": 0.0}, 100.0, bio, ng,
+                                            heat_per_MJ_CH4=0.9)
+    assert plan["ad"][0] == (bio, pytest.approx(100.0), "megajoule")
+    assert plan["ad"][1] == (ng, pytest.approx(30.0), "megajoule")
+    assert used == pytest.approx(100.0) and short == {"ad": pytest.approx(30.0)}
+    for bad in (0.0, 1.2, float("nan")):
+        with pytest.raises(ValueError):
+            sb.plan_heat_supply({"ad": "own_biogas", "htc": ng, "dryer": elec},
+                                {"ad": 1.0}, 10.0, bio, ng, heat_per_MJ_CH4=bad)

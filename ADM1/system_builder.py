@@ -252,6 +252,9 @@ class SystemContext:
     # Paper 1 (HTC electric, dryer ctx.drying_heat, digester ctx.ad_heat).
     heat_supply: Optional[dict] = None
     heat_backup: Any = None              # MJ heat activity for an own-biogas shortfall (None -> ctx.ad_heat)
+    # MJ heat delivered per MJ methane burned on site, relative to the natural
+    # gas boiler of the credit (see HEAT SUPPLY below); 1.0 = Paper 1 convention
+    own_biogas_heat_eff: float = 1.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -410,8 +413,16 @@ def apply_pw_ch4_multiplier(CH4_kg, CO2_kg, COD_fed_kg, m):
 #   "own_biogas": raw biogas diverted before upgrading and burned on site,
 #       written as Q MJ of the foreground heat_biomethane activity
 #       (combustion emissions). One MJ of methane (LHV) gives
-#       OWN_BIOGAS_HEAT_PER_MJ_CH4 MJ of heat; 1.0 keeps the convention of the
-#       exported biomethane (1 MJ biomethane = 1 MJ heat displaced). Biogas
+#       ctx.own_biogas_heat_eff MJ of heat (default OWN_BIOGAS_HEAT_PER_MJ_CH4
+#       = 1.0, the convention of the exported biomethane: 1 MJ biomethane =
+#       1 MJ heat displaced). The value is relative to the natural gas boiler
+#       whose delivered heat the credit uses: 1.0 = raw biogas burned in a
+#       boiler as efficient as that one. With 1.0, "own biogas" and "all
+#       natural gas" differ only by the PSA methane loss and electricity
+#       avoided on the diverted share and by the combustion emissions; this
+#       near-equality is an energy identity, not a missing loss. A value < 1
+#       makes on-site combustion of raw biogas less efficient than the
+#       displaced boiler. Biogas
 #       is allocated to the digester first, then the HTC, then the dryer; a
 #       shortfall comes from ctx.heat_backup (default ctx.ad_heat).
 # The diverted methane is not upgraded: the PSA and the exported biomethane
@@ -453,7 +464,8 @@ def _supply_amount(act, Q_MJ, consumer):
     return (act, Q_MJ, "megajoule")
 
 
-def plan_heat_supply(sources, demands_MJ, CH4_MJ_avail, heat_biogas_act, backup_act):
+def plan_heat_supply(sources, demands_MJ, CH4_MJ_avail, heat_biogas_act, backup_act,
+                     heat_per_MJ_CH4=OWN_BIOGAS_HEAT_PER_MJ_CH4):
     """
     Exchanges supplying each heat demand.
     sources: resolve_heat_sources(); demands_MJ: {consumer: MJ};
@@ -462,7 +474,10 @@ def plan_heat_supply(sources, demands_MJ, CH4_MJ_avail, heat_biogas_act, backup_
     {consumer: shortfall MJ}).
     """
     plan, short = {}, {}
-    left = max(0.0, float(CH4_MJ_avail)) * OWN_BIOGAS_HEAT_PER_MJ_CH4
+    eta = float(heat_per_MJ_CH4)
+    if not (np.isfinite(eta) and 0.0 < eta <= 1.0):
+        raise ValueError(f"[heat supply] own_biogas_heat_eff = {heat_per_MJ_CH4} must be in (0, 1]")
+    left = max(0.0, float(CH4_MJ_avail)) * eta
     for c in HEAT_CONSUMERS:
         Q = max(0.0, float(demands_MJ.get(c, 0.0)))
         src = sources[c]
@@ -471,12 +486,14 @@ def plan_heat_supply(sources, demands_MJ, CH4_MJ_avail, heat_biogas_act, backup_
             continue
         own = min(Q, left)
         left -= own
-        plan[c] = [(heat_biogas_act, own, "megajoule")] if own > 0 else []
+        # heat_biomethane is written per MJ methane burned (as for the
+        # exported biomethane), so its combustion emissions follow the fuel
+        plan[c] = [(heat_biogas_act, own / eta, "megajoule")] if own > 0 else []
         if Q - own > 1e-12:
             short[c] = Q - own
             plan[c].append(_supply_amount(backup_act, Q - own, c))
-    used = max(0.0, float(CH4_MJ_avail)) * OWN_BIOGAS_HEAT_PER_MJ_CH4 - left
-    return plan, used / OWN_BIOGAS_HEAT_PER_MJ_CH4, short
+    used = max(0.0, float(CH4_MJ_avail)) * eta - left
+    return plan, used / eta, short
 
 
 def _write_heat(act, supply):
@@ -1895,7 +1912,8 @@ def _build_system(ctx: SystemContext,
         _heat_src = resolve_heat_sources(ctx)
         _heat_plan, _CH4_div_MJ, _heat_short = plan_heat_supply(
             _heat_src, _heat_dem, CH4_m3 * LHV_biomethane, heat_biomethane,
-            ctx.heat_backup if ctx.heat_backup is not None else ad_heat)
+            ctx.heat_backup if ctx.heat_backup is not None else ad_heat,
+            heat_per_MJ_CH4=ctx.own_biogas_heat_eff)
         print(f"[heat supply] demands MJ {({k: round(v, 2) for k, v in _heat_dem.items()})}  "
               f"own biogas used {_CH4_div_MJ:.2f} MJ CH4  shortfall {_heat_short}")
     biomethane_m3 = max(0.0, CH4_m3 - _CH4_div_MJ / LHV_biomethane) * PSA_CH4_recovery
@@ -2121,6 +2139,7 @@ def _build_system(ctx: SystemContext,
         waste_treatment[f"heat_demand_{_c}_MJ"] = float(_heat_dem[_c]) if _heat_dem else None
         waste_treatment[f"heat_shortfall_{_c}_MJ"] = float(_heat_short.get(_c, 0.0))
     waste_treatment["CH4_own_use_MJ"] = float(_CH4_div_MJ)
+    waste_treatment["own_biogas_heat_eff"] = float(ctx.own_biogas_heat_eff)
     waste_treatment["pw_COD_fed_kg"] = float(_COD_fed_A) if PATHWAY == "A" else None
     if PATHWAY == "B":
         for _k in ("_NH4_N_kg", "_dg_VS_destroyed", "_dg_f_NH4", "_dg_warnings",
