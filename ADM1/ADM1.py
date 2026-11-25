@@ -253,7 +253,15 @@ _FW_FEED = dict(
 
 PATHWAY_B_FEED_PARAMS = {
     "food_waste": _FW_FEED,
-    "ofmsw": dict(_FW_FEED, source="= food_waste. " + _FW_FEED["source"]),
+    # source-separated OFMSW (kitchen + garden waste): lower degradability than
+    # food waste because of garden-waste lignin. Range set by the user
+    # (decision log C1c), consistent with fD(food waste) minus the lignin slope
+    # of Chandler et al. 1980 (B = 0.830 - 0.028 x lignin % VS) for 8-15 %
+    # lignin in VS. f_sol and k_hyd still those of food waste.
+    "ofmsw": dict(_FW_FEED, fD=0.70, fD_range=(0.60, 0.80),
+                  source=("fD: user's range 0.60-0.80 (decision log C1c), lignin slope of "
+                          "Chandler et al. 1980, OSTI 5595813, Eq. 24. f_sol, k_hyd = food_waste. "
+                          + _FW_FEED["source"])),
     "dairy_manure": dict(
         fD=0.47, fD_range=(0.40, 0.55),
         f_sol=0.03, f_sol_range=None,

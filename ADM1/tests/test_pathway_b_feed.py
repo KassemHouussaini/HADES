@@ -30,7 +30,8 @@ def test_values_as_specified(adm1):
     assert (P["dairy_manure"]["fD"], P["dairy_manure"]["f_sol"], P["dairy_manure"]["k_hyd"]) == (0.47, 0.03, 0.15)
     assert (P["wheat_straw"]["fD"], P["wheat_straw"]["f_sol"], P["wheat_straw"]["k_hyd"]) == (0.74, 0.17, 0.08)
     assert (P["sewage_sludge"]["fD"], P["sewage_sludge"]["f_sol"], P["sewage_sludge"]["k_hyd"]) == (0.62, 0.21, 0.36)
-    assert P["ofmsw"]["fD"] == P["food_waste"]["fD"]
+    assert (P["ofmsw"]["fD"], P["ofmsw"]["fD_range"]) == (0.70, (0.60, 0.80))
+    assert (P["ofmsw"]["f_sol"], P["ofmsw"]["k_hyd"]) == (P["food_waste"]["f_sol"], P["food_waste"]["k_hyd"])
 
 
 def test_translate_carries_k_hyd_and_overrides(adm1):
