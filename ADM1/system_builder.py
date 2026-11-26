@@ -233,6 +233,9 @@ class SystemContext:
     # Pathway B: overrides of the feedstock degradability (ADM1.PATHWAY_B_FEED_PARAMS),
     # e.g. {"fD": 0.80, "f_sol": 0.30, "k_hyd": 0.20}; None = tabulated values
     b_feed_overrides: Optional[dict] = None
+    # Pathway B feed chemistry: None/"legacy" (Paper 1 inputs) or "fisgativa"
+    # (measured inorganic carbon, ammonium, ions and lipid share; ADM1, C1d)
+    b_feed_chemistry: Optional[str] = None
     # heat displaced by biomethane: None -> ctx.ng_heat_market (Paper 1); or
     # [(activity, weight)] (e.g. lca_contexts.ng_heat_datasets resolved), weights normalized
     ng_heat_components: Optional[list] = None
@@ -1485,6 +1488,7 @@ def _build_system(ctx: SystemContext,
             HRT_days=adm1_HRT_days, TS_target=TS_target,
             feedstock_name=ctx.feedstock_name,
             feed_overrides=ctx.b_feed_overrides,
+            chemistry=ctx.b_feed_chemistry,
         )
 
         m_feedstock_slurry = feed_inputs["_m_slurry_kg"]
@@ -2141,6 +2145,7 @@ def _build_system(ctx: SystemContext,
         waste_treatment[f"heat_shortfall_{_c}_MJ"] = float(_heat_short.get(_c, 0.0))
     waste_treatment["CH4_own_use_MJ"] = float(_CH4_div_MJ)
     waste_treatment["own_biogas_heat_eff"] = float(ctx.own_biogas_heat_eff)
+    waste_treatment["b_feed_chemistry"] = (feed_inputs.get("_feed_chemistry") if PATHWAY == "B" else None)
     waste_treatment["pw_COD_fed_kg"] = float(_COD_fed_A) if PATHWAY == "A" else None
     if PATHWAY == "B":
         for _k in ("_NH4_N_kg", "_dg_VS_destroyed", "_dg_f_NH4", "_dg_warnings",

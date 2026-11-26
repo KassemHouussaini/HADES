@@ -259,6 +259,7 @@ def make_context(sb, ei, bios, rc, point, heat_config, fg):
         feedstock_name=point["feedstock_type"],
         b_feed_overrides=prm.get("b_feed_overrides") or None,
         pw_ch4_multiplier=prm.get("pw_ch4_multiplier", 1.0),
+        b_feed_chemistry=point.get("b_feed_chemistry"),
         heat_supply=hs, heat_backup=backup,
         heat_mix_components_qc=rc["heat_mix"], ng_heat_components=rc["ng_comp"], ash_disposal=rc["ash"],
         hi_overrides=hio or None, u_fc=prm.get("u_fc"),
@@ -360,7 +361,7 @@ def background_keys(wt):
 # RESULT ROW
 # =============================================================================
 META_KEYS = ["CH4_mass_AD", "biomethane_m3", "MJ_hydrochar", "HC_dry_yield", "PW_yield",
-             "E_HTC_elec_kWh", "E_dryer_heat_kWh", "Q_heat_AD_MJ", "CH4_own_use_MJ", "own_biogas_heat_eff",
+             "E_HTC_elec_kWh", "E_dryer_heat_kWh", "Q_heat_AD_MJ", "CH4_own_use_MJ", "own_biogas_heat_eff", "b_feed_chemistry",
              "heat_demand_htc_MJ", "heat_demand_dryer_MJ", "heat_demand_ad_MJ",
              "heat_shortfall_htc_MJ", "heat_shortfall_dryer_MJ", "heat_shortfall_ad_MJ",
              "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd",

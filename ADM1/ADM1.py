@@ -312,6 +312,68 @@ def pathway_b_feed_params(feedstock_name, overrides=None):
     return p
 
 
+# Pathway B feed chemistry (decision log C1d). "legacy": inorganic carbon in
+# equilibrium with air (floored at 0.01 kmol C/m3), all feed N organic,
+# cations/anions from a charge balance at pH 7.2 around 0.04, lipid share
+# estimated from O/C. "fisgativa": the method of Fisgativa et al. 2020, Data
+# in Brief 29:105212 (sections 2.1 and 2.4) with their measured substrate data
+# (Table 2), per kg TS so that it scales to the diluted digester feed:
+#   S_IC   = measured total inorganic carbon (TIC)
+#   S_IN   = measured NH4+, as a share of TKN applied to the sampled feed N;
+#            protein from the organic N (N - NH4+) as before
+#   S_cat, S_an = their ADM1 inputs (Table 5) per kg TS. Their charge-balance
+#            equation (section 2.4, step 5) does not reproduce their own
+#            Table 5 values (horse feed example: 0.10 vs 0.23 kmol/m3), so the
+#            published inputs are used; dilution water carries no ions, so both
+#            scale with TS
+#   lipids = measured lipid share of the COD (NMR), replaces the O/C estimate
+# Classes: food waste and OFMSW = "Biowaste" (catering kitchen waste); dairy
+# manure = "Manure" (cattle manure, low straw); sewage sludge = mean of
+# "Sludge I" (primary) and "Sludge II" (secondary) per kg TS. Continuous mode
+# only (sweeps, plant LCA); batch mode keeps the legacy inputs.
+B_FEED_CHEMISTRY_DEFAULT = "legacy"
+B_FEED_CHEMISTRY_OPTIONS = ("legacy", "fisgativa")
+_FIS_T2 = {   # Table 2: TS gTS/kgWW, TIC gC/kgWW, TKN, NH4+ gN/kgWW, pH, lipids %COD;
+              # Table 5: S_cat, S_an kmol/m3 of substrate
+    "biowaste":  dict(TS=190.2, TIC=1.1, TKN=6.4, NH4=0.1, pH=5.28, lip=0.402, cat=0.04, an=0.02),
+    "manure":    dict(TS=191.3, TIC=1.2, TKN=5.2, NH4=0.8, pH=8.54, lip=0.047, cat=0.10, an=0.02),
+    "sludge_I":  dict(TS=57.3,  TIC=0.7, TKN=1.8, NH4=0.1, pH=5.44, lip=0.260, cat=0.04, an=0.02),
+    "sludge_II": dict(TS=53.7,  TIC=0.3, TKN=3.9, NH4=0.2, pH=5.94, lip=0.137, cat=0.02, an=0.02),
+}
+
+
+def _fis_class(rows):
+    r = [_FIS_T2[k] for k in rows]
+    m = lambda f: sum(f(x) for x in r) / len(r)
+    return dict(tic_gC_per_kgTS=m(lambda x: 1000.0 * x["TIC"] / x["TS"]),
+                nh4_share_TKN=m(lambda x: x["NH4"] / x["TKN"]),
+                pH=m(lambda x: x["pH"]), lipid_cod=m(lambda x: x["lip"]),
+                cat_kmol_per_kgTS=m(lambda x: x["cat"] / x["TS"]),
+                an_kmol_per_kgTS=m(lambda x: x["an"] / x["TS"]), rows=tuple(rows))
+
+
+FISGATIVA_FEED_CHEM = {
+    "food_waste": _fis_class(["biowaste"]),
+    "ofmsw": _fis_class(["biowaste"]),
+    "dairy_manure": _fis_class(["manure"]),
+    "sewage_sludge": _fis_class(["sludge_I", "sludge_II"]),
+}
+FIS_KA_CO2, FIS_KA_IN, FIS_S_AN = 4.94e-7, 1.11e-9, 0.02
+
+
+def fisgativa_cation(S_IC, S_IN, pH, S_an=FIS_S_AN, S_va=0.0, S_bu=0.0, S_pro=0.0, S_ac=0.0):
+    """S_cat from the charge balance of Fisgativa et al. 2020 (section 2.4,
+    step 5) at the substrate pH; VFA in kg COD/m3."""
+    h = 10.0 ** (-pH)
+    ion = lambda pka, x: 10.0 ** (-pka) * x / (10.0 ** (-pka) + h)
+    s_hco3 = FIS_KA_CO2 * S_IC / (FIS_KA_CO2 + h)
+    s_nh3 = S_IN - h * S_IN / (FIS_KA_IN + h)
+    kw = 1e-14
+    cat = (s_hco3 + ion(4.76, S_ac) / 64.0 + ion(4.88, S_pro) / 112.0 + ion(4.82, S_bu) / 160.0
+           + ion(4.86, S_va) / 208.0 + kw / h + S_an - S_IN + s_nh3 - h)
+    return bound("S_cat (feedstock, Fisgativa) >= 0", cat, lo=0.0)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ELEMENTAL COMPOSITION -> ADM1 INPUT FRACTIONS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -398,7 +460,10 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
     else:
         protein_frac = bound("protein fraction (feedstock) <= 0.55", (N / m_org) / 0.16, 0.0, 0.55)
         OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
-        lipid_raw = bound("lipid fraction (feedstock) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
+        if use_feed and feed_params.get("lipid_cod") is not None:
+            lipid_raw = float(feed_params["lipid_cod"])          # measured (Fisgativa, C1d)
+        else:
+            lipid_raw = bound("lipid fraction (feedstock) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
         lipid_frac = bound("lipid fraction (feedstock) <= 0.80 - protein", lipid_raw,
                            hi=max(0.0, 0.80 - protein_frac))
         carb_frac = bound("carbohydrate fraction (feedstock) >= 0.05",
@@ -1228,13 +1293,28 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
                                   slurry_density=1.02,
                                   T_op=308.15,
                                   feedstock_name=None,
-                                  feed_overrides=None):
+                                  feed_overrides=None,
+                                  chemistry=None):
     """Raw feedstock -> ADM1 influent (Pathway B). feedstock_name selects the
     degradability data of PATHWAY_B_FEED_PARAMS (fD, f_sol, k_hyd;
     feed_overrides replaces any of them); None keeps the legacy inputs
-    (LEGACY_FEED_PARAMS)."""
+    (LEGACY_FEED_PARAMS). chemistry: "legacy" or "fisgativa" (inorganic
+    carbon, ammonium, ions and lipid share; FISGATIVA_FEED_CHEM; continuous
+    mode only); None = B_FEED_CHEMISTRY_DEFAULT."""
+    chemistry = B_FEED_CHEMISTRY_DEFAULT if chemistry is None else chemistry
+    if chemistry not in B_FEED_CHEMISTRY_OPTIONS:
+        raise ValueError(f"[ADM1 feed] chemistry {chemistry!r} not in {B_FEED_CHEMISTRY_OPTIONS}")
     feed_params = (pathway_b_feed_params(feedstock_name, feed_overrides)
                    if feedstock_name is not None else None)
+    fis = None
+    if chemistry == "fisgativa" and mode == "continuous":
+        if feedstock_name not in FISGATIVA_FEED_CHEM:
+            raise ValueError(f"[ADM1 feed] no Fisgativa feed chemistry for {feedstock_name!r}; "
+                             f"known: {sorted(FISGATIVA_FEED_CHEM)}")
+        fis = FISGATIVA_FEED_CHEM[feedstock_name]
+        feed_params = dict(feed_params, lipid_cod=fis["lipid_cod"])
+    N_total = N_feed                          # all N: dry mass, COD, ammonium
+    N_org = N_total if fis is None else N_total * (1.0 - fis["nh4_share_TKN"])   # protein
     m_org     = C_feed + H_feed + O_feed + N_feed + S_feed
     m_dry     = m_org + ash_kg
     total_COD = compute_thod(C_feed, H_feed, O_feed, N_feed, S_feed)
@@ -1255,7 +1335,11 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
             raise ValueError("HRT_days required for continuous mode")
         V_dig_meta   = V_feed * HRT_days
         COD_conc_inf = COD_conc
-        S_IN, f_IN   = compute_S_IN(N_feed, V_feed, "feedstock")
+        if fis is None:
+            S_IN, f_IN   = compute_S_IN(N_feed, V_feed, "feedstock")
+        else:
+            S_IN = bound("S_IN (feedstock) <= 0.13 kmol N/m3",
+                         N_total * fis["nh4_share_TKN"] / MW_N / V_feed, 0.0, 0.13)
     else:
         VS_sub       = total_COD / 1.4
         V_inoc       = 2.0 * VS_sub / 12.0
@@ -1264,21 +1348,29 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
         S_IN         = bound("S_IN (feedstock, batch) <= 0.13 kmol N/m3",
                              N_feed / V_dig_meta / MW_N, hi=0.13)
 
-    S_IC = compute_S_IC(pH=8, T_op_K=T_op, p_CO2_atm=0.0005)
+    if fis is None:
+        S_IC = compute_S_IC(pH=8, T_op_K=T_op, p_CO2_atm=0.0005)
+    else:
+        S_IC = bound("S_IC (feedstock, Fisgativa) <= 0.30 kmol C/m3",
+                     m_dry * fis["tic_gC_per_kgTS"] / 1000.0 / 12.011 / V_feed, 0.0, 0.30)
 
-    fractions = derive_adm1_fractions(C_feed, H_feed, O_feed, N_feed, S_feed,
+    fractions = derive_adm1_fractions(C_feed, H_feed, O_feed, N_org, S_feed,
                                        ash_kg=ash_kg, substrate_type="feedstock",
                                        feed_params=feed_params)
     _print_fractions(fractions, "feedstock", C_feed, H_feed, O_feed, N_feed, S_feed)
 
-    S_cation, S_anion = compute_charge_pair(
-        S_IC, S_IN,
-        fractions.get("S_va",  0.0) * COD_conc_inf,
-        fractions.get("S_bu",  0.0) * COD_conc_inf,
-        fractions.get("S_pro", 0.0) * COD_conc_inf,
-        fractions.get("S_ac",  0.0) * COD_conc_inf,
-        pH_target=pH_target, T_op=T_op,
-    )
+    if fis is None:
+        S_cation, S_anion = compute_charge_pair(
+            S_IC, S_IN,
+            fractions.get("S_va",  0.0) * COD_conc_inf,
+            fractions.get("S_bu",  0.0) * COD_conc_inf,
+            fractions.get("S_pro", 0.0) * COD_conc_inf,
+            fractions.get("S_ac",  0.0) * COD_conc_inf,
+            pH_target=pH_target, T_op=T_op,
+        )
+    else:
+        S_cation = m_dry * fis["cat_kmol_per_kgTS"] / V_feed
+        S_anion = m_dry * fis["an_kmol_per_kgTS"] / V_feed
 
     d = _build_adm1_dict(fractions, COD_conc_inf, S_IN, S_IC,
                           S_cation, S_anion, V_feed, V_dig_meta,
@@ -1294,6 +1386,7 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     d["_m_org_kg"]          = m_org
     d["_pw_mode"]           = False   # Pathway B: standard ADM1
     d["_feedstock_name"]    = feedstock_name
+    d["_feed_chemistry"]    = "fisgativa" if fis is not None else "legacy"
     if feed_params is not None:
         d["_k_hyd"]  = feed_params["k_hyd"]    # read by run_adm1
         d["_fD"]     = feed_params["fD"]
