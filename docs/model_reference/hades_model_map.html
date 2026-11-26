@@ -1,483 +1,552 @@
 <title>HADES Model Map</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a process-flow sheet. Diagram first (the plant as an engineer draws it),
-   then one data sheet per unit operation, then evidence and open questions. */
+/* Layout: a readable technical report. One centred reading column (~68 characters),
+   generous spacing, a plant diagram at the top, then one section per unit operation
+   that reads top to bottom: what it does, how it is calculated, values, caveats. */
 :root {
-  --bg: #f4f6f4;          /* paper, slight green-grey bias */
+  --bg: #f7f8f6;
   --panel: #ffffff;
-  --fg: #1b2626;          /* ink */
-  --muted: #5b6a69;
-  --line: #d3dbd9;
-  --a: #a85a17;           /* Pathway A: HTC first (amber, hot process) */
-  --a-soft: #f6e8db;
-  --b: #1d6b74;           /* Pathway B: AD first (teal, wet digestion) */
-  --b-soft: #dcecee;
-  --shared: #4a5568;
-  --shared-soft: #e6e9ee;
-  --flag: #9b2c2c;
-  --flag-soft: #f7e3e3;
-  --ok: #2f6b3a;
-  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-head: "IBM Plex Sans Condensed", "IBM Plex Sans", "Arial Narrow", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --fg: #1e2827;
+  --soft: #3f4b4a;
+  --muted: #6a7877;
+  --line: #dde3e1;
+  --a: #a1561a;  --a-soft: #f7ebe0;     /* Pathway A, HTC first */
+  --b: #1c6871;  --b-soft: #e0eff0;     /* Pathway B, AD first */
+  --s: #47566b;  --s-soft: #e8ecf1;     /* shared */
+  --flag: #a33434; --flag-soft: #fbecec;
+  --ok: #2d6a39;
+  --font-read: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121817; --panel: #19211f; --fg: #e3ebe9; --muted: #9aa9a7; --line: #2c3836;
-    --a: #e39a5a; --a-soft: #3a2a1c; --b: #5fb9c3; --b-soft: #183235;
-    --shared: #a9b4c4; --shared-soft: #252c35; --flag: #f08a8a; --flag-soft: #3a2020; --ok: #7cc58a;
-    color-scheme: dark;
+    --bg: #141a19; --panel: #1b2321; --fg: #e5ecea; --soft: #c3cfcc; --muted: #95a4a1; --line: #2e3a38;
+    --a: #e6a067; --a-soft: #36271a; --b: #66bec8; --b-soft: #17302f; --s: #aab6c7; --s-soft: #232a33;
+    --flag: #f19494; --flag-soft: #3a2121; --ok: #82c991; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #121817; --panel: #19211f; --fg: #e3ebe9; --muted: #9aa9a7; --line: #2c3836;
-  --a: #e39a5a; --a-soft: #3a2a1c; --b: #5fb9c3; --b-soft: #183235;
-  --shared: #a9b4c4; --shared-soft: #252c35; --flag: #f08a8a; --flag-soft: #3a2020; --ok: #7cc58a;
-  color-scheme: dark;
+  --bg: #141a19; --panel: #1b2321; --fg: #e5ecea; --soft: #c3cfcc; --muted: #95a4a1; --line: #2e3a38;
+  --a: #e6a067; --a-soft: #36271a; --b: #66bec8; --b-soft: #17302f; --s: #aab6c7; --s-soft: #232a33;
+  --flag: #f19494; --flag-soft: #3a2121; --ok: #82c991; color-scheme: dark;
 }
-body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
-.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-h1, h2, h3 { font-family: var(--font-head); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: .005em; }
-h1 { font-size: 2.1rem; line-height: 1.15; }
-h2 { font-size: 1.45rem; margin-top: 44px; }
-h3 { font-size: 1.15rem; }
-p { margin: 0; max-width: 72ch; }
-a { color: var(--b); text-underline-offset: 2px; }
-a:focus-visible, button:focus-visible, .node:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; }
-.eyebrow { font-family: var(--font-mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-header { display: grid; gap: 10px; }
-.lede { color: var(--muted); font-size: 1.02rem; }
-.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--font-mono); font-size: .8rem; color: var(--muted); }
-.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: .8rem; font-weight: 500; border: 1px solid var(--line); background: var(--panel); }
-.chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.chip.a i { background: var(--a); } .chip.b i { background: var(--b); } .chip.s i { background: var(--shared); }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-read); font-size: 18px; line-height: 1.7; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 48px 96px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.read { max-width: 68ch; }
+h1, h2, h3, h4 { font-family: var(--font-ui); font-weight: 600; text-wrap: balance; margin: 0; color: var(--fg); }
+h1 { font-size: 2.5rem; line-height: 1.15; letter-spacing: -.01em; }
+h2 { font-size: 1.7rem; line-height: 1.25; }
+h3 { font-size: 1.45rem; line-height: 1.3; }
+h4 { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--b); text-underline-offset: 3px; }
+a:focus-visible, .node:focus-visible, .jump a:focus-visible { outline: 2px solid var(--a); outline-offset: 3px; border-radius: 4px; }
+code { font-family: var(--font-mono); font-size: .82em; }
+.ui { font-family: var(--font-ui); }
+.kicker { font-family: var(--font-ui); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* header */
+header { display: grid; gap: 20px; }
+.lede { font-size: 1.2rem; color: var(--soft); }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 28px; font-family: var(--font-ui); font-size: .9rem; color: var(--muted); }
+.facts b { color: var(--fg); font-weight: 600; }
+.pathways { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 8px; }
+.pw { border-radius: 10px; padding: 18px 22px; display: grid; gap: 6px; }
+.pw.a { background: var(--a-soft); } .pw.b { background: var(--b-soft); }
+.pw h4 { color: inherit; }
+.pw.a h4 { color: var(--a); } .pw.b h4 { color: var(--b); }
+.pw p { font-size: 1rem; }
+
+section.block { margin-top: 72px; display: grid; gap: 18px; }
 
 /* diagram */
-.diagram { margin-top: 18px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-.diagram svg { display: block; min-width: 860px; width: 100%; height: auto; }
-.lane-label { font-family: var(--font-head); font-size: 15px; font-weight: 600; }
+.diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.diagram svg { display: block; min-width: 900px; width: 100%; height: auto; }
+.lane-label { font-family: var(--font-ui); font-size: 16px; font-weight: 600; }
 .lane-a .lane-label { fill: var(--a); } .lane-b .lane-label { fill: var(--b); }
-.lane-bg-a { fill: var(--a-soft); } .lane-bg-b { fill: var(--b-soft); } .lane-bg-s { fill: var(--shared-soft); }
+.lane-bg-a { fill: var(--a-soft); } .lane-bg-b { fill: var(--b-soft); } .lane-bg-s { fill: var(--s-soft); }
 .node { cursor: pointer; }
-.node rect { fill: var(--panel); stroke-width: 1.5; }
-.node.a rect { stroke: var(--a); } .node.b rect { stroke: var(--b); } .node.s rect { stroke: var(--shared); }
-.node text { fill: var(--fg); font-family: var(--font-body); font-size: 12.5px; pointer-events: none; }
-.node .sub { fill: var(--muted); font-size: 10.5px; font-family: var(--font-mono); }
-.node:hover rect, .node.active rect { stroke-width: 3; }
-.flow { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.node rect { fill: var(--panel); stroke-width: 1.6; }
+.node.a rect { stroke: var(--a); } .node.b rect { stroke: var(--b); } .node.s rect { stroke: var(--s); }
+.node text { fill: var(--fg); font-family: var(--font-ui); font-size: 14px; font-weight: 500; pointer-events: none; }
+.node .sub { fill: var(--muted); font-size: 11.5px; font-weight: 400; }
+.node:hover rect, .node.active rect { stroke-width: 3.2; }
+.flow { fill: none; stroke: var(--muted); stroke-width: 1.6; }
 .flow.a { stroke: var(--a); } .flow.b { stroke: var(--b); }
-.flow-label { fill: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.flow-label { fill: var(--muted); font-family: var(--font-ui); font-size: 11.5px; font-style: italic; }
 .arrow-a { fill: var(--a); } .arrow-b { fill: var(--b); } .arrow-m { fill: var(--muted); }
-.hint { margin-top: 8px; font-size: .85rem; color: var(--muted); }
+.hint { font-family: var(--font-ui); font-size: .92rem; color: var(--muted); }
 
-/* cards */
-.cards { display: grid; gap: 18px; margin-top: 16px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; display: grid; gap: 12px; scroll-margin-top: 16px; }
-.card.hl { box-shadow: 0 0 0 3px var(--a); }
-.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
-.tag { font-family: var(--font-mono); font-size: .72rem; padding: 1px 8px; border-radius: 4px; letter-spacing: .04em; }
-.tag.a { background: var(--a-soft); color: var(--a); } .tag.b { background: var(--b-soft); color: var(--b); } .tag.s { background: var(--shared-soft); color: var(--shared); }
-.role { color: var(--muted); }
-.io { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 20px; }
-.io div { min-width: 0; }
-.label { font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 2px; }
-.eq { font-family: var(--font-mono); font-size: .86rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: pre; line-height: 1.7; }
+/* jump list */
+.jump { display: flex; flex-wrap: wrap; gap: 10px; font-family: var(--font-ui); font-size: .92rem; }
+.jump a { text-decoration: none; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.jump a:hover { border-color: var(--muted); }
+.jump a .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+
+/* unit sections */
+.unit { margin-top: 80px; padding-top: 40px; border-top: 1px solid var(--line); display: grid; gap: 28px; scroll-margin-top: 24px; }
+.unit.hl h3 { text-decoration: underline; text-decoration-color: var(--a); text-decoration-thickness: 3px; text-underline-offset: 6px; }
+.unit-head { display: grid; gap: 10px; }
+.tag { justify-self: start; font-family: var(--font-ui); font-size: .78rem; font-weight: 600; letter-spacing: .06em; padding: 3px 12px; border-radius: 999px; }
+.tag.a { background: var(--a-soft); color: var(--a); } .tag.b { background: var(--b-soft); color: var(--b); } .tag.s { background: var(--s-soft); color: var(--s); }
+.summary { font-size: 1.15rem; color: var(--soft); }
+.io { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 32px; }
+.io > div { display: grid; gap: 6px; min-width: 0; }
+
+.steps { display: grid; gap: 22px; counter-reset: step; }
+.step { display: grid; gap: 8px; }
+.step p { max-width: 68ch; }
+.formula { font-family: var(--font-mono); font-size: .9rem; line-height: 1.8; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--s); border-radius: 6px; padding: 12px 16px; overflow-x: auto; white-space: pre; color: var(--fg); }
+.unit.a .formula { border-left-color: var(--a); } .unit.b .formula { border-left-color: var(--b); }
+
 .tbl { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: .86rem; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
-td.v { font-family: var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
-td.src.none { color: var(--flag); font-weight: 500; }
-ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-ul.notes li.cap::marker { color: var(--flag); }
-.refs { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .84rem; }
-.refs code { font-family: var(--font-mono); font-size: .8rem; }
+table { border-collapse: collapse; width: 100%; font-family: var(--font-ui); font-size: .95rem; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.5; }
+th { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+td.v { font-family: var(--font-mono); font-size: .88rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.src { color: var(--soft); }
+td.src .none { display: inline-block; font-weight: 600; color: var(--flag); background: var(--flag-soft); padding: 0 8px; border-radius: 4px; margin-right: 6px; }
 
-/* evidence + questions */
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; }
-.ev { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; min-width: 0; }
-.ev .num { font-family: var(--font-mono); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+ul.keep { margin: 0; padding-left: 1.2em; display: grid; gap: 12px; max-width: 68ch; }
+ul.keep li.cap { color: var(--fg); }
+ul.keep li.cap::marker { color: var(--flag); }
+.capnote { font-family: var(--font-ui); font-size: .78rem; font-weight: 600; color: var(--flag); letter-spacing: .04em; margin-right: 6px; }
+.where { font-family: var(--font-ui); font-size: .92rem; color: var(--muted); display: grid; gap: 6px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.where div { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.where b { color: var(--fg); font-weight: 600; min-width: 7.5em; }
+
+/* evidence and questions */
+.evs { display: grid; gap: 16px; }
+.ev { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 20px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.ev .row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 18px; }
+.ev h4 { color: var(--fg); text-transform: none; letter-spacing: 0; font-size: 1.05rem; }
+.ev .num { font-family: var(--font-mono); font-size: 1rem; font-variant-numeric: tabular-nums; }
 .ev .ok { color: var(--ok); } .ev .warn { color: var(--flag); }
-.q { background: var(--flag-soft); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; }
-.q h3 { color: var(--flag); font-size: 1.05rem; }
-footer { margin-top: 48px; color: var(--muted); font-size: .85rem; display: grid; gap: 6px; }
-@media (prefers-reduced-motion: no-preference) { .card { transition: box-shadow .25s; } }
+.ev p { color: var(--soft); font-size: 1rem; }
+.qs { display: grid; gap: 16px; counter-reset: q; }
+.q { padding: 22px 24px; border-radius: 10px; background: var(--flag-soft); display: grid; gap: 8px; }
+.q h3 { font-size: 1.15rem; color: var(--flag); }
+.q p { font-size: 1.02rem; }
+footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: .98rem; display: grid; gap: 10px; }
+@media (max-width: 600px) { body { font-size: 17px; } h1 { font-size: 2rem; } .unit { margin-top: 56px; } }
 </style>
 
 <div class="wrap">
 <header>
-  <span class="eyebrow">HADES · Paper 2 · model documentation</span>
+  <span class="kicker">HADES · Paper 2 · model documentation</span>
   <h1>HADES Model Map</h1>
-  <p class="lede">How one tonne of wet organic waste moves through the two pathways HADES compares: <strong style="color:var(--a)">A</strong>, hydrothermal carbonization first and digestion of the process water; <strong style="color:var(--b)">B</strong>, anaerobic digestion first and carbonization of the digestate. Every step below states its equations, its parameters with their source, the assumptions and caps that can bind, and where it lives in the code.</p>
-  <div class="meta"><span>Branch paper2-dev</span><span>Functional unit: 1 t wet feedstock</span><span>Background: ecoinvent 3.12 cut-off</span><span>Methods: IMPACT World+ 2.2.1</span><span>State: 26 Nov 2026</span></div>
-  <div class="legend"><span class="chip a"><i></i>Pathway A</span><span class="chip b"><i></i>Pathway B</span><span class="chip s"><i></i>Shared by both</span></div>
+  <p class="lede read">HADES follows one tonne of wet organic waste through two plants and compares their environmental impacts. This page explains, one unit at a time, how each step is calculated, which values it uses and where they come from, and what a reader should keep in mind.</p>
+  <div class="pathways">
+    <div class="pw a"><h4>Pathway A · HTC first</h4><p>The waste is carbonized first. The solid hydrochar is dried and burned for heat, and the liquid process water is digested to biogas.</p></div>
+    <div class="pw b"><h4>Pathway B · AD first</h4><p>The waste is digested first. The biogas is upgraded to biomethane, and the remaining digestate is carbonized into hydrochar.</p></div>
+  </div>
+  <div class="facts"><span><b>Branch</b> paper2-dev</span><span><b>Functional unit</b> 1 t wet feedstock</span><span><b>Background</b> ecoinvent 3.12 cut-off</span><span><b>Impact methods</b> IMPACT World+ 2.2.1</span><span><b>State</b> 26 November 2026</span></div>
 </header>
 
-<h2>Process flow</h2>
-<p class="hint">Click a unit to open its data sheet. Units that appear in both lanes use the same model and the same sheet.</p>
-<div class="diagram" role="figure" aria-label="Process flow of Pathways A and B">
-<svg viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-a"/></marker>
-    <marker id="mb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-b"/></marker>
-    <marker id="mm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-m"/></marker>
-  </defs>
-  <!-- lanes -->
-  <g class="lane-a"><rect class="lane-bg-a" x="10" y="10" width="890" height="215" rx="8"/><text class="lane-label" x="24" y="34">Pathway A · HTC first</text></g>
-  <g class="lane-b"><rect class="lane-bg-b" x="10" y="240" width="890" height="215" rx="8"/><text class="lane-label" x="24" y="264">Pathway B · AD first</text></g>
-  <rect class="lane-bg-s" x="912" y="10" width="178" height="445" rx="8"/>
-  <text class="lane-label" x="926" y="34" style="fill:var(--shared)">Both</text>
-  <rect class="lane-bg-s" x="10" y="468" width="1080" height="44" rx="8"/>
+<section class="block">
+  <h2>The two plants</h2>
+  <p class="hint">Click a unit to read how it is calculated. A unit that appears in both lanes uses the same model.</p>
+  <div class="diagram" role="figure" aria-label="Process flow of Pathways A and B">
+  <svg viewBox="0 0 1100 540" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-a"/></marker>
+      <marker id="mb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-b"/></marker>
+      <marker id="mm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-m"/></marker>
+    </defs>
+    <g class="lane-a"><rect class="lane-bg-a" x="10" y="10" width="890" height="220" rx="10"/><text class="lane-label" x="26" y="36">Pathway A · HTC first</text></g>
+    <g class="lane-b"><rect class="lane-bg-b" x="10" y="245" width="890" height="220" rx="10"/><text class="lane-label" x="26" y="271">Pathway B · AD first</text></g>
+    <rect class="lane-bg-s" x="912" y="10" width="178" height="455" rx="10"/>
+    <text class="lane-label" x="928" y="36" style="fill:var(--s)">Both</text>
+    <rect class="lane-bg-s" x="10" y="480" width="1080" height="50" rx="10"/>
 
-  <!-- flows A -->
-  <path class="flow a" d="M150,90 H190" marker-end="url(#ma)"/>
-  <path class="flow a" d="M330,90 H370" marker-end="url(#ma)"/>
-  <path class="flow a" d="M510,90 H550" marker-end="url(#ma)"/>
-  <path class="flow a" d="M690,90 H730" marker-end="url(#ma)"/>
-  <path class="flow a" d="M440,115 V170 H550" marker-end="url(#ma)"/>
-  <text class="flow-label" x="448" y="160">process water</text>
-  <path class="flow a" d="M690,180 H730" marker-end="url(#ma)"/>
-  <path class="flow a" d="M870,90 H930" marker-end="url(#ma)"/>
-  <path class="flow a" d="M870,180 H900 V160 H930" marker-end="url(#ma)"/>
-  <!-- flows B -->
-  <path class="flow b" d="M150,320 H190" marker-end="url(#mb)"/>
-  <path class="flow b" d="M330,320 H370" marker-end="url(#mb)"/>
-  <path class="flow b" d="M440,345 V400 H550" marker-end="url(#mb)"/>
-  <text class="flow-label" x="448" y="390">digestate</text>
-  <path class="flow b" d="M510,320 H550" marker-end="url(#mb)"/>
-  <text class="flow-label" x="514" y="312">biogas</text>
-  <path class="flow b" d="M690,400 H730" marker-end="url(#mb)"/>
-  <path class="flow b" d="M690,320 H930" marker-end="url(#mb)"/>
-  <path class="flow b" d="M870,400 H900 V160 H930" marker-end="url(#mb)"/>
-  <path class="flow" d="M1000,215 V245" marker-end="url(#mm)"/>
+    <path class="flow a" d="M150,92 H190" marker-end="url(#ma)"/>
+    <path class="flow a" d="M330,92 H370" marker-end="url(#ma)"/>
+    <path class="flow a" d="M510,92 H550" marker-end="url(#ma)"/>
+    <path class="flow a" d="M690,92 H730" marker-end="url(#ma)"/>
+    <path class="flow a" d="M440,120 V180 H550" marker-end="url(#ma)"/>
+    <text class="flow-label" x="450" y="170">process water</text>
+    <path class="flow a" d="M690,180 H730" marker-end="url(#ma)"/>
+    <path class="flow a" d="M870,92 H930" marker-end="url(#ma)"/>
+    <path class="flow a" d="M870,180 H900 V165 H930" marker-end="url(#ma)"/>
+    <path class="flow b" d="M150,327 H190" marker-end="url(#mb)"/>
+    <path class="flow b" d="M330,327 H370" marker-end="url(#mb)"/>
+    <path class="flow b" d="M440,355 V412 H550" marker-end="url(#mb)"/>
+    <text class="flow-label" x="450" y="402">digestate</text>
+    <path class="flow b" d="M510,327 H550" marker-end="url(#mb)"/>
+    <text class="flow-label" x="514" y="318">biogas</text>
+    <path class="flow b" d="M690,412 H730" marker-end="url(#mb)"/>
+    <path class="flow b" d="M690,327 H930" marker-end="url(#mb)"/>
+    <path class="flow b" d="M870,412 H900 V165 H930" marker-end="url(#mb)"/>
+    <path class="flow" d="M1003,222 V250" marker-end="url(#mm)"/>
 
-  <!-- nodes: data-card links to the sheet -->
-  <g class="node a" data-card="feed" tabindex="0" role="button" aria-label="Feedstock"><rect x="30" y="65" width="120" height="50" rx="6"/><text x="42" y="86">Feedstock</text><text class="sub" x="42" y="103">4 classes, sampled</text></g>
-  <g class="node a" data-card="prep" tabindex="0" role="button" aria-label="Feed preparation"><rect x="190" y="65" width="140" height="50" rx="6"/><text x="202" y="86">Feed preparation</text><text class="sub" x="202" y="103">dilute to 85 % H2O</text></g>
-  <g class="node a" data-card="htc" tabindex="0" role="button" aria-label="HTC reactor"><rect x="370" y="65" width="140" height="50" rx="6"/><text x="382" y="86">HTC reactor</text><text class="sub" x="382" y="103">XGBoost surrogate</text></g>
-  <g class="node a" data-card="dry" tabindex="0" role="button" aria-label="Press and dryer"><rect x="550" y="65" width="140" height="50" rx="6"/><text x="562" y="86">Press and dryer</text><text class="sub" x="562" y="103">to 10 % moisture</text></g>
-  <g class="node a" data-card="enduse" tabindex="0" role="button" aria-label="Hydrochar boiler"><rect x="730" y="65" width="140" height="50" rx="6"/><text x="742" y="86">Hydrochar boiler</text><text class="sub" x="742" y="103">heat, capped stack</text></g>
-  <g class="node a" data-card="pw" tabindex="0" role="button" aria-label="Process-water digester"><rect x="550" y="155" width="140" height="50" rx="6"/><text x="562" y="176">PW digester</text><text class="sub" x="562" y="193">PW-ADM1, 30 d</text></g>
-  <g class="node a" data-card="upgrade" tabindex="0" role="button" aria-label="Biogas upgrading"><rect x="730" y="155" width="140" height="50" rx="6"/><text x="742" y="176">Upgrading (PSA)</text><text class="sub" x="742" y="193">biomethane</text></g>
+    <g class="node a" data-card="feed" tabindex="0" role="button" aria-label="Feedstock"><rect x="30" y="64" width="120" height="56" rx="8"/><text x="44" y="88">Feedstock</text><text class="sub" x="44" y="107">4 classes, sampled</text></g>
+    <g class="node a" data-card="prep" tabindex="0" role="button" aria-label="Feed preparation"><rect x="190" y="64" width="140" height="56" rx="8"/><text x="204" y="88">Feed preparation</text><text class="sub" x="204" y="107">water to 85 %</text></g>
+    <g class="node a" data-card="htc" tabindex="0" role="button" aria-label="HTC reactor"><rect x="370" y="64" width="140" height="56" rx="8"/><text x="384" y="88">HTC reactor</text><text class="sub" x="384" y="107">machine learning</text></g>
+    <g class="node a" data-card="dry" tabindex="0" role="button" aria-label="Press and dryer"><rect x="550" y="64" width="140" height="56" rx="8"/><text x="564" y="88">Press and dryer</text><text class="sub" x="564" y="107">to 10 % moisture</text></g>
+    <g class="node a" data-card="enduse" tabindex="0" role="button" aria-label="Hydrochar boiler"><rect x="730" y="64" width="140" height="56" rx="8"/><text x="744" y="88">Hydrochar boiler</text><text class="sub" x="744" y="107">industrial heat</text></g>
+    <g class="node a" data-card="pw" tabindex="0" role="button" aria-label="Process-water digester"><rect x="550" y="152" width="140" height="56" rx="8"/><text x="564" y="176">Process-water</text><text x="564" y="194">digester</text></g>
+    <g class="node a" data-card="upgrade" tabindex="0" role="button" aria-label="Biogas upgrading"><rect x="730" y="152" width="140" height="56" rx="8"/><text x="744" y="176">Biogas upgrading</text><text class="sub" x="744" y="195">to biomethane</text></g>
+    <g class="node b" data-card="feed" tabindex="0" role="button" aria-label="Feedstock"><rect x="30" y="299" width="120" height="56" rx="8"/><text x="44" y="323">Feedstock</text><text class="sub" x="44" y="342">same samples</text></g>
+    <g class="node b" data-card="prep" tabindex="0" role="button" aria-label="Feed preparation"><rect x="190" y="299" width="140" height="56" rx="8"/><text x="204" y="323">Feed preparation</text><text class="sub" x="204" y="342">water to 10 % TS</text></g>
+    <g class="node b" data-card="adm1b" tabindex="0" role="button" aria-label="Digester"><rect x="370" y="299" width="140" height="56" rx="8"/><text x="384" y="323">Digester</text><text class="sub" x="384" y="342">20, 30 or 40 days</text></g>
+    <g class="node b" data-card="upgrade" tabindex="0" role="button" aria-label="Biogas upgrading"><rect x="550" y="299" width="140" height="56" rx="8"/><text x="564" y="323">Biogas upgrading</text><text class="sub" x="564" y="342">to biomethane</text></g>
+    <g class="node b" data-card="digestate" tabindex="0" role="button" aria-label="Digestate and HTC"><rect x="550" y="384" width="140" height="56" rx="8"/><text x="564" y="408">Digestate</text><text class="sub" x="564" y="427">dewatered, then HTC</text></g>
+    <g class="node b" data-card="dry" tabindex="0" role="button" aria-label="Press, dryer and boiler"><rect x="730" y="384" width="140" height="56" rx="8"/><text x="744" y="408">Press, dryer,</text><text x="744" y="426">boiler</text></g>
+    <g class="node s" data-card="lca" tabindex="0" role="button" aria-label="Credits and impacts"><rect x="930" y="64" width="146" height="158" rx="8"/><text x="944" y="90">Credits and</text><text x="944" y="108">impacts</text><text class="sub" x="944" y="134">hydrochar replaces</text><text class="sub" x="944" y="150">industrial heat;</text><text class="sub" x="944" y="170">biomethane replaces</text><text class="sub" x="944" y="186">natural gas heat</text><text class="sub" x="944" y="208">11 provinces</text></g>
+    <g class="node s" data-card="heat" tabindex="0" role="button" aria-label="Heat integration and supply"><rect x="930" y="252" width="146" height="112" rx="8"/><text x="944" y="278">Heat needs and</text><text x="944" y="296">heat supply</text><text class="sub" x="944" y="320">electricity, natural</text><text class="sub" x="944" y="336">gas or own biogas</text></g>
+    <g class="node s" data-card="sweep" tabindex="0" role="button" aria-label="Sweep design"><rect x="22" y="488" width="1056" height="34" rx="8"/><text x="38" y="510">How many simulations: 9,600 plant runs, each scored for 11 provinces and 3 heat supplies</text></g>
+  </svg>
+  </div>
+  <nav class="jump" id="jump" aria-label="Jump to a unit"></nav>
+</section>
 
-  <g class="node b" data-card="feed" tabindex="0" role="button" aria-label="Feedstock"><rect x="30" y="295" width="120" height="50" rx="6"/><text x="42" y="316">Feedstock</text><text class="sub" x="42" y="333">same samples as A</text></g>
-  <g class="node b" data-card="prep" tabindex="0" role="button" aria-label="Feed preparation"><rect x="190" y="295" width="140" height="50" rx="6"/><text x="202" y="316">Feed preparation</text><text class="sub" x="202" y="333">dilute to 10 % TS</text></g>
-  <g class="node b" data-card="adm1b" tabindex="0" role="button" aria-label="Digester ADM1"><rect x="370" y="295" width="140" height="50" rx="6"/><text x="382" y="316">Digester</text><text class="sub" x="382" y="333">ADM1, 20/30/40 d</text></g>
-  <g class="node b" data-card="upgrade" tabindex="0" role="button" aria-label="Biogas upgrading"><rect x="550" y="295" width="140" height="50" rx="6"/><text x="562" y="316">Upgrading (PSA)</text><text class="sub" x="562" y="333">biomethane</text></g>
-  <g class="node b" data-card="digestate" tabindex="0" role="button" aria-label="Digestate"><rect x="550" y="375" width="140" height="50" rx="6"/><text x="562" y="396">Digestate + HTC</text><text class="sub" x="562" y="413">centrifuge, surrogate</text></g>
-  <g class="node b" data-card="dry" tabindex="0" role="button" aria-label="Press, dryer and boiler"><rect x="730" y="375" width="140" height="50" rx="6"/><text x="742" y="396">Press, dryer, boiler</text><text class="sub" x="742" y="413">as in A</text></g>
+<div id="units"></div>
 
-  <g class="node s" data-card="lca" tabindex="0" role="button" aria-label="Credits and LCA"><rect x="930" y="65" width="145" height="150" rx="6"/><text x="942" y="88">Credits and LCA</text><text class="sub" x="942" y="108">hydrochar heat →</text><text class="sub" x="942" y="122">industrial heat mix</text><text class="sub" x="942" y="142">biomethane →</text><text class="sub" x="942" y="156">natural gas boilers</text><text class="sub" x="942" y="180">11 provinces</text><text class="sub" x="942" y="194">IMPACT World+</text></g>
-  <g class="node s" data-card="heat" tabindex="0" role="button" aria-label="Heat integration and supply"><rect x="930" y="245" width="145" height="110" rx="6"/><text x="942" y="268">Heat integration</text><text class="sub" x="942" y="288">HTC, dryer and</text><text class="sub" x="942" y="302">digester duties;</text><text class="sub" x="942" y="322">electric, natural gas</text><text class="sub" x="942" y="336">or own biogas</text></g>
-  <g class="node s" data-card="sweep" tabindex="0" role="button" aria-label="Sweep engine"><rect x="20" y="474" width="1060" height="32" rx="6"/><text x="34" y="495">Sweep engine · 9,600 points × 11 provinces × 3 heat supplies, Latin hypercube, A and B paired on the same samples</text></g>
-</svg>
-</div>
+<section class="block">
+  <h2>Does the model work as intended?</h2>
+  <p class="read">Six checks, run on the current code. The weak result is shown as clearly as the good ones.</p>
+  <div class="evs" id="evidence"></div>
+</section>
 
-<h2>Unit data sheets</h2>
-<div class="cards" id="cards"></div>
-
-<h2>Evidence the model works as intended</h2>
-<div class="grid2" id="evidence"></div>
-
-<h2>Decisions needed from the supervisors</h2>
-<div class="grid2" id="questions"></div>
+<section class="block">
+  <h2>Decisions I need from you</h2>
+  <p class="read">These choices change the results or how they can be published. Each comes with what I would do by default.</p>
+  <div class="qs" id="questions"></div>
+</section>
 
 <footer>
-  <p>Generated from the code and the decision log on branch <code>paper2-dev</code>. Full parameter list with a link to every line: <a href="https://github.com/KassemHouussaini/HADES/blob/paper2-dev/docs/model_reference/parameters.md" target="_blank" rel="noopener">parameters.md</a>. Reasons and dates for every choice: <a href="https://github.com/KassemHouussaini/HADES/blob/paper2-dev/docs/paper2_decision_log.md" target="_blank" rel="noopener">decision log</a>. Code links open GitHub and need access to the repository.</p>
-  <p>Entries marked <span style="color:var(--flag);font-weight:500">no source</span> are values in the code without a reference yet (17 of 137 parameters, decision log A4).</p>
+  <p>This page is built from the code and the decision log on the branch <code>paper2-dev</code>. Every parameter of the model, with a link to the line of code that sets it, is listed in <a href="https://github.com/KassemHouussaini/HADES/blob/paper2-dev/docs/model_reference/parameters.md" target="_blank" rel="noopener">the parameter table</a>. The reason and date for every modelling choice are in <a href="https://github.com/KassemHouussaini/HADES/blob/paper2-dev/docs/paper2_decision_log.md" target="_blank" rel="noopener">the decision log</a>; codes such as F13 or C1d refer to its entries.</p>
+  <p>Values marked <span style="color:var(--flag);font-weight:600">no source</span> are used in the code but have no reference yet (17 of 137 parameters). Links to the code open GitHub and need access to the repository.</p>
 </footer>
 </div>
 
 <script>
 const GH = "https://github.com/KassemHouussaini/HADES/blob/paper2-dev/";
-const code = (f, fn) => `<a href="${GH}${f.replace(/ /g, "%20")}" target="_blank" rel="noopener"><code>${f.split("/").pop()}</code></a>${fn ? ` <code>${fn}</code>` : ""}`;
+const link = (f, label) => `<a href="${GH}${f.replace(/ /g, "%20")}" target="_blank" rel="noopener"><code>${label || f.split("/").pop()}</code></a>`;
 const P = (name, value, source, none) => ({ name, value, source, none: !!none });
+const S = (text, formula) => ({ text, formula });
 
-const CARDS = [
-{ id: "feed", lane: "a", tag: "A + B", title: "Feedstock and composition sampler",
-  role: "Draws one realistic composition per sample within each feedstock class, so that results show whether a recommendation holds for a class or depends on the particular waste.",
-  inputs: "Class (food waste, OFMSW, raw mixed sewage sludge, dairy manure); class ranges of C, H, N, S, ash, VM, FC and moisture.",
-  outputs: "100 compositions per class (% dry, O by difference); moisture sampled separately within the class range.",
-  eq: `y_i = ln(x_i / x_O),  i ∈ {C, H, N, S, ash}          additive log-ratio (Aitchison 1986)
-y ~ N(μ, Σ)   μ = y at the class central composition
-              σ_i = [ln(hi_i/O_c) − ln(lo_i/O_c)] / 4    range ≈ ±2σ
-              Σ = corr(real compositions) · σσᵀ
-x_O = 100 / (1 + Σ exp y_i),   x_i = x_O · exp y_i         every draw closes to 100 %
-r = FC/(VM+FC) logit-normal;   VM = (100−ash)(1−r),  FC = (100−ash)·r
-keep the draw only if every element, O, VM and FC is inside the class range`,
-  params: [
-    P("Class ranges and centrals", "decision log F15 table", "User's literature table; food waste data article (Table 3); HTC training dataset"),
-    P("Correlations", "17 food waste, 16 sludge compositions", "HTC training dataset, cleaned (F14); manure and OFMSW pooled within-class (40 rows)"),
-    P("S = 0 in data", "replaced by 0.01 %", "Needed for logs; methodological choice", true),
+const UNITS = [
+{ id: "feed", lane: "s", tag: "Both pathways", title: "Feedstock and its composition",
+  summary: "Food waste is not the same from one city to the next. Instead of one fixed composition per feedstock, every simulation draws its own realistic composition, so the results show whether a recommendation holds for a whole class of waste or only for one particular sample.",
+  inputs: "One of four classes: food waste, source-separated OFMSW, raw mixed sewage sludge, or dairy manure. For each class, a range and a central value for carbon, hydrogen, nitrogen, sulfur, ash, volatile matter, fixed carbon and moisture.",
+  outputs: "One hundred compositions per class, on a dry basis, with oxygen by difference. The moisture is drawn separately within the class range.",
+  steps: [
+    S("The elements cannot be drawn one by one: a waste with more ash has less of everything else, and carbon and hydrogen rise together. The composition is therefore expressed as ratios to oxygen and sampled on a log scale, the standard method for compositional data (Aitchison 1986).",
+      "y_i = ln( x_i / x_O )        for i = C, H, N, S, ash"),
+    S("The ratios are drawn from a normal distribution. Its centre is the class's central composition, its spread is set so that each element's range is about two standard deviations either side, and the way the elements move together is measured on real compositions from the HTC literature dataset.",
+      "y ~ Normal( μ , Σ )\nσ_i = [ ln(high_i / O_central) − ln(low_i / O_central) ] / 4"),
+    S("Converting back always gives a composition that adds up to 100 %. A draw is kept only if every element, oxygen, volatile matter and fixed carbon fall inside the class ranges.",
+      "x_O = 100 / ( 1 + Σ exp(y_i) )        x_i = x_O · exp(y_i)"),
   ],
-  notes: ["Every sampled composition lies inside the HTC surrogate's joint applicability domain (median distance 0.7 to 1.6 against a threshold of 2.50).",
-          "Sewage sludge is raw mixed sludge (primary + waste activated), entering as dewatered cake; digested sludge above 45 % ash is outside the class."],
-  code: [["ADM1/feedstock_sampler.py", "sample(), correlations()"]], tests: ["tests/test_feedstock_sampler.py"], log: "F14, F15, F16" },
+  params: [
+    P("Class ranges and central values", "table F15", "Your literature table, the food waste data article (Table 3) and the HTC training dataset"),
+    P("How the elements move together", "17 food waste, 16 sludge compositions", "HTC training dataset after cleaning (F14); manure and OFMSW use the pooled within-class correlation of all classes"),
+    P("Sulfur reported as zero", "replaced by 0.01 %", "A logarithm of zero is undefined; method choice", true),
+  ],
+  keep: ["Every sampled composition lies inside the region where the HTC model was trained (distance 0.7 to 1.6 against a limit of 2.5).",
+         "Sewage sludge means raw mixed sludge, primary plus waste activated, arriving as dewatered cake. Digested sludge, above about 45 % ash, is outside the class."],
+  code: [["ADM1/feedstock_sampler.py", "sample()"]], tests: ["tests/test_feedstock_sampler.py"], log: "F14, F15, F16" },
 
-{ id: "prep", lane: "a", tag: "A + B", title: "Feed preparation and dilution",
-  role: "Brings the feed to the moisture or solids content each reactor runs at. A feed drier than the target gets tap water; a wetter feed is never dried.",
-  inputs: "Wet feed (1 t), its moisture; the design targets.",
-  outputs: "Slurry to the HTC reactor (A) or to the digester (B); dilution water (tap water, heated in the reactor).",
-  eq: `A:  HTC slurry moisture = max(feed moisture, 0.85)
-     process water to digester diluted to ≤ 25 kg COD/m³
-B:  digester feed TS = min(feed TS, 10 %)
-     digestate mechanically dewatered (centrifuge) to the HTC moisture target`,
-  params: [
-    P("HTC slurry moisture", "0.85", "User's design value (F13); inside the surrogate training data (median 0.90, 5th–95th 0.71–0.95)"),
-    P("A digester feed COD", "25 kg COD/m³", "User's design value (F13); literature support pending"),
-    P("B digester feed TS", "10 %", "User's design value (F13); wet digestion"),
-    P("HRT", "A 30 d; B 20 / 30 / 40 d (grid)", "F13: process water is soluble, so HRT does not limit A (C1b)"),
+{ id: "prep", lane: "s", tag: "Both pathways", title: "Feed preparation",
+  summary: "Each reactor runs at a set water content. If the waste is drier than that, tap water is added; if it is wetter, it is used as it is. The added water is pumped, heated and later treated, so it carries a burden.",
+  inputs: "One tonne of wet waste and its moisture, plus three design targets.",
+  outputs: "A slurry for the HTC reactor (Pathway A) or for the digester (Pathway B), and the amount of dilution water.",
+  steps: [
+    S("In Pathway A, the HTC slurry is brought to 85 % water, and the process water that goes to the digester is diluted to at most 25 kg COD per cubic metre.",
+      "HTC slurry moisture = max( feed moisture , 0.85 )\nprocess water COD   ≤ 25 kg COD/m³"),
+    S("In Pathway B, the digester is fed at 10 % total solids. After digestion, the digestate is dewatered in a centrifuge to the HTC moisture target.",
+      "digester feed TS = min( feed TS , 10 % )"),
   ],
-  notes: ["Design targets are fixed, not sampled: in the screening they dominated the result (F9).",
-          "Sewage sludge at 10 % TS implies a high-solids or thermal-hydrolysis digester; conventional digesters run 4–7 % TS (stated limitation)."],
+  params: [
+    P("HTC slurry moisture", "0.85", "Your design value (F13); inside the HTC training data (median 0.90)"),
+    P("Pathway A digester feed", "25 kg COD/m³", "Your design value (F13); literature support to add"),
+    P("Pathway B digester feed", "10 % TS", "Your design value (F13); wet digestion"),
+    P("Digester residence time", "A: 30 d · B: 20, 30, 40 d", "Process water is already dissolved, so time does not limit Pathway A (C1b)"),
+  ],
+  keep: ["These targets are fixed, not sampled. In the screening they dominated the comparison, and sampling them would have made the answer depend on ranges chosen by the author (F9).",
+         "For sewage sludge, 10 % solids implies a high-solids or thermal-hydrolysis digester; conventional ones run at 4 to 7 %. This is a stated limitation."],
   code: [["ADM1/ADM1.py", "translate_feedstock_to_adm1()"], ["ADM1/sweep_engine.py", "MAIN_SWEEP_FIXED_DESIGN"]], tests: ["tests/test_system_builder_pure.py"], log: "F6, F13" },
 
-{ id: "htc", lane: "a", tag: "A + B", title: "HTC reactor (machine-learning surrogate)",
-  role: "Predicts hydrochar yield and composition from the feed (A) or the dewatered digestate (B), temperature and residence time. Process water and gas follow by mass balance.",
-  inputs: "T (180 / 220 / 240 °C), RT (60 / 240 min), feed VM, FC, C, H, N, S, ash (% dry), water-to-dry-biomass ratio.",
-  outputs: "Hydrochar yield, HHV, C, H, O, N, S, ash; process water elements by difference; joint applicability-domain distance.",
-  eq: `XGBoost regressors (tuned), one per target; trained on 938 rows from the HTC literature
-process water element = feed element − hydrochar element − gas element   (by difference)
-domain check: nearest-neighbour distance in standardized input space ≤ D_T = 2.50
-              (threshold from between-study neighbours, Netzeva et al. 2005)`,
-  params: [
-    P("Training data", "938 rows", "HTC_dataset_paper.xlsx (literature compilation)"),
-    P("CV R², random 5-fold", "yield 0.866, HHV 0.912, C 0.944", "C0"),
-    P("CV R², grouped by study", "yield 0.275, HHV 0.584, C 0.755", "C0: the honest out-of-study skill"),
-    P("Domain threshold D_T", "2.50", "C0b; Sahigara et al. 2012; Roy, Kar & Ambure 2015"),
+{ id: "htc", lane: "s", tag: "Both pathways", title: "HTC reactor",
+  summary: "Hydrothermal carbonization turns wet biomass into a solid hydrochar under heat and pressure. HADES predicts what comes out with machine-learning models trained on published HTC experiments. The liquid process water is whatever the hydrochar and gas did not take.",
+  inputs: "Temperature (180, 220 or 240 °C), residence time (60 or 240 min), and the feed's volatile matter, fixed carbon, carbon, hydrogen, nitrogen, sulfur, ash and water-to-solids ratio. In Pathway B, the feed is the dewatered digestate.",
+  outputs: "Hydrochar yield, heating value and elemental composition; the elements in the process water; a distance that tells how far the input is from the training data.",
+  steps: [
+    S("One gradient-boosted tree model (XGBoost, tuned) predicts each hydrochar property from the inputs. The models were trained on 938 experiments from the HTC literature.",
+      "hydrochar yield, HHV, C, H, O, N, S, ash = XGBoost( T, RT, feed composition, water/solids )"),
+    S("The process water gets every element that did not end up in the hydrochar or the gas. This mass balance is closed by difference.",
+      "element in process water = element in feed − element in hydrochar − element in gas"),
+    S("Each prediction is checked against the training data. If the nearest training point is farther than a set limit, the run is flagged as an extrapolation.",
+      "distance to nearest training point ≤ 2.50   (otherwise flagged)"),
   ],
-  notes: ["The surrogate responds to every composition input (12–20 distinct values over each range), but in steps: small input changes can move hydrochar energy by several percent (F18).",
-          "Pathway A methane depends on process-water carbon taken by difference, which amplifies surrogate error (F18).",
-          "Prediction error is not sampled in the sweep yet (F2): probabilities that A beats B are conditional on the surrogate."],
-  code: [["ML training scripts and models/htc_surrogate.py", "HTC_parametric_ML()"], ["ML training scripts and models/applicability_domain.py", ""]], tests: ["tests/test_htc_surrogate.py"], log: "C0, C0b, F2, F18" },
+  params: [
+    P("Training data", "938 experiments", "HTC literature compilation (HTC_dataset_paper.xlsx)"),
+    P("Accuracy, random cross-validation", "R² yield 0.87, HHV 0.91, C 0.94", "C0"),
+    P("Accuracy on studies not seen in training", "R² yield 0.28, HHV 0.58, C 0.76", "C0: the honest measure for a new waste"),
+    P("Distance limit", "2.50", "C0b; Sahigara et al. 2012; Roy, Kar & Ambure 2015"),
+  ],
+  keep: ["The model responds to every composition input, but in small steps rather than smoothly. A small change in input can move the hydrochar energy by several percent (F18).",
+         "In Pathway A, the methane comes from process-water carbon taken by difference, which magnifies any error in the predicted hydrochar carbon (F18).",
+         "The prediction error is not yet part of the uncertainty analysis (F2). Until it is, the share of runs in which A beats B is conditional on the surrogate."],
+  code: [["ML training scripts and models/htc_surrogate.py", "htc_surrogate.py"], ["ML training scripts and models/applicability_domain.py", "applicability_domain.py"]], tests: ["tests/test_htc_surrogate.py"], log: "C0, C0b, F2, F18" },
 
-{ id: "dry", lane: "a", tag: "A + B", title: "Filter press and dryer",
-  role: "Removes water from the wet hydrochar mechanically, then thermally down to the storage moisture.",
-  inputs: "Wet hydrochar from the reactor; moisture after the press.",
-  outputs: "Dried hydrochar (10 % moisture); dryer heat; press and fan electricity.",
-  eq: `water evaporated = hydrochar water at MC_char − water at 10 % moisture
-Q_dryer = water evaporated × 3.6 MJ/kg            (supplied as heat, see Heat)
-E_fan   = water evaporated × 0.085 kWh/kg
-E_press = dry hydrochar × 25 kWh/t TS`,
-  params: [
-    P("Moisture after press MC_char", "0.35 (0.30–0.50)", "heat_integration [refs in module header]"),
-    P("Dryer heat", "3.6 MJ/kg water (1.8–4.32)", "Belt dryer [10] in heat_integration"),
-    P("Press electricity", "25 kWh/t TS (20–30)", "heat_integration"),
+{ id: "dry", lane: "s", tag: "Both pathways", title: "Filter press and dryer",
+  summary: "The wet hydrochar is first pressed, then dried with heat to 10 % moisture so it can be stored and burned.",
+  inputs: "Wet hydrochar from the reactor.",
+  outputs: "Dried hydrochar, the heat the dryer needs, and the electricity of the press and the dryer fan.",
+  steps: [
+    S("The press leaves the hydrochar at a set moisture. The dryer then evaporates the water down to 10 %, and each kilogram of water evaporated costs a fixed amount of heat and fan electricity.",
+      "water evaporated = water at press moisture − water at 10 % moisture\ndryer heat        = water evaporated × 3.6 MJ/kg\nfan electricity   = water evaporated × 0.085 kWh/kg"),
+    S("The press itself uses electricity in proportion to the dry hydrochar.",
+      "press electricity = dry hydrochar × 25 kWh per tonne of solids"),
   ],
-  notes: ["Press electricity changes totals by at most 0.2 % (F18)."],
-  code: [["ADM1/heat_integration.py", "dryer_duty(), press_duty_kWh()"]], tests: ["tests/test_system_builder_pure.py"], log: "F3" },
+  params: [
+    P("Moisture after the press", "0.35 (0.30 to 0.50)", "Heat-integration references in the module header"),
+    P("Dryer heat", "3.6 MJ/kg water (1.8 to 4.32)", "Belt dryer reference [10] in heat_integration"),
+    P("Press electricity", "25 kWh/t solids (20 to 30)", "heat_integration"),
+  ],
+  keep: ["The press electricity changes the totals by at most 0.2 % (F18)."],
+  code: [["ADM1/heat_integration.py", "dryer_duty()"]], tests: ["tests/test_system_builder_pure.py"], log: "F3" },
 
-{ id: "enduse", lane: "a", tag: "A + B", title: "Hydrochar boiler and stack emissions",
-  role: "Burns the dried hydrochar for industrial heat, modelled on the ecoinvent hard coal industrial furnace scaled by heating value. Stack emissions are capped at the legal limits of a permitted boiler.",
-  inputs: "Dry hydrochar mass, HHV, C, H, O, N, S, ash.",
-  outputs: "Heat delivered (MJ), biogenic CO2, NOx, SO2, dust; ash to disposal; mass that must be removed to meet the limits.",
-  eq: `MJ_heat = m_dry × (HHV_char / 30.42) / 0.04325          coal furnace: 0.04325 kg coal per MJ
-E_uncontrolled: SO2 = 2·S;  NOx = N × nox_conv × 46/14;  dust ∝ ash
-E_emitted = min(E_uncontrolled, ELV × V_fluegas(6 % O2))
-removed   = E_uncontrolled − E_emitted                    (recorded, not inventoried)`,
-  params: [
-    P("HHV of reference coal", "30.42 MJ/kg", "ecoinvent hard coal furnace input, net-to-gross corrected"),
-    P("ELV NOx / SO2 / dust", "500 / 400 / 50 mg/Nm³", "Directive (EU) 2015/2193, Annex II, new plants 1–5 MW"),
-    P("Fuel N to NOx", "0.10 (0.01–0.25)", "hydrochar_enduse NOX_CONV_RANGE"),
+{ id: "enduse", lane: "s", tag: "Both pathways", title: "Hydrochar boiler",
+  summary: "The dried hydrochar is burned in an industrial boiler and replaces the province's average industrial heat. The boiler is modelled on the ecoinvent hard coal furnace, scaled to the hydrochar's heating value. A permitted boiler cannot emit above its legal limits, so its stack emissions are capped.",
+  inputs: "Dry hydrochar mass, heating value and composition.",
+  outputs: "Heat delivered, biogenic CO₂, NOx, SO₂ and dust, ash to disposal, and the mass of pollutants that would have to be removed to meet the limits.",
+  steps: [
+    S("The heat delivered follows from how much coal the hydrochar replaces in the ecoinvent furnace.",
+      "heat (MJ) = dry hydrochar × ( HHV hydrochar / 30.42 ) / 0.04325"),
+    S("The stack emissions are first estimated from the hydrochar composition, then limited to what the law allows for the flue gas volume. The difference is what a flue gas treatment would have to remove.",
+      "SO₂ = 2 × S          NOx = N × conversion × 46/14\nemitted = min( estimate , limit × flue gas volume at 6 % O₂ )\nremoved = estimate − emitted      (recorded, not yet counted as a burden)"),
   ],
-  notes: ["NOx, SO2 and dust sit at the limits in practically every run, so hydrochar N and S do not change these emissions (F18).",
-          "The flue gas treatment needed to meet the limits is not inventoried. Removal reaches about 89 % SO2 for sludge (F19); a bounding check after the sweep tests whether this changes any ranking."],
-  caps: ["NOx, SO2 and dust ELV caps bind in all pilot points."],
+  params: [
+    P("Heating value of the reference coal", "30.42 MJ/kg", "ecoinvent hard coal furnace, net-to-gross corrected"),
+    P("Limits NOx, SO₂, dust", "500, 400, 50 mg/Nm³", "Directive (EU) 2015/2193, Annex II, new plants of 1 to 5 MW"),
+    P("Share of fuel N emitted as NOx", "0.10 (0.01 to 0.25)", "hydrochar_enduse"),
+  ],
+  keep: ["NOx, SO₂ and dust reach the limits in practically every run, so the hydrochar's nitrogen and sulfur do not change these emissions (F18).",
+         "Meeting the limits needs flue gas treatment, which is not yet counted. For sludge, about 89 % of the SO₂ would have to be removed. A bounding check after the sweep will show whether this changes any ranking (F19)."],
+  caps: ["The NOx, SO₂ and dust limits bind in every point of the pilot run."],
   code: [["ADM1/hydrochar_enduse.py", "compute_enduse_quantities()"]], tests: ["tests/test_hydrochar_enduse.py"], log: "F18, F19" },
 
-{ id: "pw", lane: "a", tag: "A", title: "Process-water digester (PW-ADM1)",
-  role: "Digests the HTC process water. ADM1 extended with six inhibiting sub-pools of soluble inert compounds formed in HTC.",
-  inputs: "Process-water elements (by difference), HTC temperature, dilution to 25 kg COD/m³.",
-  outputs: "Methane and CO2, digestate liquid, ammonia.",
-  eq: `S_I fraction = 0.25 + 0.10 · (T − 180)/60,  bounded [0.25, 0.50]
-biodegradable COD: 75 % soluble (5 % of it as VFA), 25 % particulate
-six S_I sub-pools (furan, alcohol, phenol, acid, ketone, humic) inhibit
-   propionate, acetate and hydrogen uptake:  I = Π K_I / (K_I + S_I,k)
-CH4 = CH4_ADM1 × m,   m ∈ [0.55, 1.45],   CH4 ≤ 350 mL CH4 / g COD fed`,
-  params: [
-    P("Sub-pool composition and K_I", "by T, 160–280 °C", "Calibrated on UASB effluent data (Tanguay-Rioux et al. 2026); PW-1 to PW-3 in ADM1.py"),
-    P("Methane multiplier m", "1.0 (0.55–1.45)", "Study-level measured BMP / PW-ADM1 (Mannarino 2022 to Aragón-Briceño 2020), C3"),
-    P("Soluble share 0.75, VFA share 0.05", "—", "No source in the code yet (A4)", true),
-    P("VFA split ac / pro / bu / va", "0.90 / 0.05 / 0.04 / 0.01", "No source in the code yet (A4)", true),
+{ id: "pw", lane: "a", tag: "Pathway A", title: "Process-water digester",
+  summary: "The HTC process water is rich in dissolved organics and is digested to biogas. HADES uses ADM1, the standard digestion model, extended with six groups of HTC by-products that slow down the methane-producing microbes. These groups and their effect were calibrated on measured process water.",
+  inputs: "The elements in the process water, the HTC temperature, and dilution to 25 kg COD/m³.",
+  outputs: "Methane and CO₂, ammonia, and the liquid effluent.",
+  steps: [
+    S("Part of the process water cannot be digested at all. That part grows with the HTC temperature.",
+      "non-digestible share = 0.25 + 0.10 × (T − 180) / 60      bounded between 0.25 and 0.50"),
+    S("Of the digestible part, 75 % is dissolved, and 5 % of that is already volatile fatty acids.",
+      "dissolved share 0.75 · of which VFA 0.05 · VFA split acetate 0.90, propionate 0.05, butyrate 0.04, valerate 0.01"),
+    S("Six groups of by-products (furans, alcohols, phenols, acids, ketones, humic substances) inhibit the microbes that consume propionate, acetate and hydrogen.",
+      "inhibition = product over the six groups of  K_I / ( K_I + concentration )"),
+    S("Because measured process-water methane varies a lot between studies, the predicted methane is multiplied by a sampled factor, and can never exceed the theoretical maximum.",
+      "methane = ADM1 methane × m          m between 0.55 and 1.45\nmethane ≤ 350 mL per g COD fed"),
   ],
-  notes: ["Complete inhibition reported at 240 °C (Marin-Batista 2020) is outside any multiplier (stated limitation).",
-          "Ammonia stays at 0.3–2.5 g N/L (pilot), below most inhibition thresholds (Chen, Cheng & Creamer 2008)."],
-  caps: ["Process-water inorganic carbon at its 0.08 floor in every A point; lipid share capped at 0.40 for manure and most sludge; protein capped at 0.55 for sludge (pilot)."],
-  code: [["ADM1/ADM1.py", "translate_pw_to_adm1(), derive_adm1_fractions()"], ["ADM1/system_builder.py", "apply_pw_ch4_multiplier()"]], tests: ["tests/test_adm1_h2tox.py", "tests/test_caps.py"], log: "C3, C1b, F18" },
-
-{ id: "adm1b", lane: "b", tag: "B", title: "Digester (ADM1) on the raw feed",
-  role: "Digests the diluted feed with feedstock-specific degradability and measured feed chemistry.",
-  inputs: "Feed elements (sampled), class degradability, HRT, 10 % TS feed.",
-  outputs: "Methane and CO2, digestate, ammonium, pH.",
-  eq: `X_I = 1 − fD,  S_I = 0;  soluble share f_sol of the degradable COD;  hydrolysis k_hyd
-protein / lipid / carbohydrate split (Kleerebezem & van Loosdrecht 2006, eq. 9):
-   per C-mol CH_yO_zN_v:  η_LIP = (y − 2z − 3v)/(5.68 − 4),  η_PR = v/0.26
-   COD share_i ∝ η_i · γ_i       (γ = 4, lipid 5.68)
-feed inorganic carbon, cations, anions, NH4+ share: measured (Fisgativa et al. 2020),
-   scaled per kg TS to the digester feed`,
   params: [
-    P("fD food waste / OFMSW / sludge / manure", "0.86 / 0.70 / 0.62 / 0.47", "Fisgativa 2020 Table 3; Labatut 2022; Chandler 1980 slope for OFMSW (C1, C1c)"),
-    P("k_hyd (d⁻¹)", "0.18 / 0.18 / 0.36 / 0.15", "Fisgativa 2020; Trzcinski & Stuckey 2012; Labatut 2022"),
-    P("Feed TIC (g C/kg TS)", "5.8 / 5.8 / 8.9 / 6.3", "Fisgativa 2020 Table 2"),
-    P("Cations (kmol/kg TS)", "from Table 5", "Fisgativa 2020 Table 5 (their charge equation does not reproduce it)"),
+    P("By-product groups and their inhibition", "by temperature, 160 to 280 °C", "Calibrated on UASB effluent data (Tanguay-Rioux et al. 2026)"),
+    P("Methane multiplier", "1.0 (0.55 to 1.45)", "Measured BMP over model, study by study, from Mannarino 2022 to Aragón-Briceño 2020 (C3)"),
+    P("Dissolved share and VFA share", "0.75 and 0.05", "Not yet referenced in the code (A4)", true),
+    P("VFA split", "0.90 / 0.05 / 0.04 / 0.01", "Not yet referenced in the code (A4)", true),
   ],
-  notes: ["Methane is set mainly by fD and total COD; the lipid split changes it by less than 1 % (C1e).",
-          "With the legacy inputs manure acidified (pH 4.0–6.6); with this chemistry all pilot B points run at pH 6.98–7.50 (C1d).",
-          "Food waste lipid share median 0.29 over the sampled compositions, against about 0.26 from the food waste data article."],
-  code: [["ADM1/ADM1.py", "translate_feedstock_to_adm1(chemistry='fisgativa_kvl'), kvl_cod_split()"]], tests: ["tests/test_pathway_b_feed.py"], log: "C1, C1c, C1d, C1e" },
+  keep: ["One study reports complete inhibition at 240 °C (Marin-Batista 2020). No multiplier covers that case; it is a stated limitation.",
+         "Ammonia stays between 0.3 and 2.5 g N/L in the pilot, below most reported inhibition thresholds (Chen, Cheng & Creamer 2008)."],
+  caps: ["Inorganic carbon sits at its floor in every Pathway A run, and the fat and protein shares are capped for manure and most sludge. These shares come from an older rule and are one of the open decisions below."],
+  code: [["ADM1/ADM1.py", "translate_pw_to_adm1()"], ["ADM1/system_builder.py", "apply_pw_ch4_multiplier()"]], tests: ["tests/test_adm1_h2tox.py", "tests/test_caps.py"], log: "C3, C1b, F18" },
 
-{ id: "digestate", lane: "b", tag: "B", title: "Digestate characterization, dewatering and HTC",
-  role: "Builds the elemental and proximate composition of the digestate from the carbon balance and measured digestate ratios, dewaters it, and sends it to the HTC surrogate.",
-  inputs: "Feed elements, ADM1 methane, CO2 and ammonium.",
-  outputs: "Digestate cake composition as a dried sample; centrate; process water.",
-  eq: `C_dig = C_feed − C in CH4 − C in CO2 − (12.011/14.007)·NH4-N
-H = C_dig · (H/C)_molar,   O = C_dig · (O/C)_molar        measured digestate ratios
-ash and S fully retained;  FC = r_FC · (100 − ash)
-cake ammonium removed from the solids (drying drives off 80–97 %) and sent to process water`,
+{ id: "adm1b", lane: "b", tag: "Pathway B", title: "Digester on the raw waste",
+  summary: "In Pathway B, the waste itself is digested. How much of it can be digested, how fast, and with how much buffering capacity are taken from measurements of real substrates. How it splits into protein, fat and carbohydrate is calculated from each sampled composition.",
+  inputs: "The sampled composition, the class's degradability, the residence time and the 10 % solids feed.",
+  outputs: "Methane and CO₂, digestate, ammonium and pH.",
+  steps: [
+    S("A fixed share of the organic matter is digestible for each class; the rest stays inert. Part of the digestible matter is already dissolved, and the solid part breaks down at a first-order rate.",
+      "inert share = 1 − fD          dissolved share = f_sol          hydrolysis rate = k_hyd"),
+    S("The split into protein, fat and carbohydrate follows from an electron balance on the composition (Kleerebezem & van Loosdrecht 2006, eq. 9). The more reduced the matter is compared with carbohydrate, the more fat it contains.",
+      "per carbon atom  C H_y O_z N_v :\nfat share     = ( y − 2z − 3v ) / ( 5.68 − 4 )\nprotein share = v / 0.26\ncarbohydrate  = the rest"),
+    S("The buffering capacity of the feed (inorganic carbon, ammonium, cations and anions) is taken from measured substrates (Fisgativa et al. 2020) and scaled per kilogram of solids to the diluted feed.",
+      "inorganic carbon, ions, ammonium share = measured value per kg solids × solids in the feed"),
+  ],
   params: [
-    P("H/C, O/C food waste", "1.39, 0.523", "Cao et al. 2019 Table 2 (household waste digestate)"),
-    P("H/C, O/C sludge", "1.65, 0.458", "Aragón-Briceño et al. 2020"),
-    P("H/C, O/C manure", "1.51, 0.638", "Belete et al. 2021 Table 1"),
-    P("FC/(VM+FC)", "0.149–0.308 by class", "Cao 2019; Tsai 2025; Pawlak-Kruczek 2020"),
+    P("Digestible share fD", "food waste 0.86 · OFMSW 0.70 · sludge 0.62 · manure 0.47", "Fisgativa 2020 Table 3, Labatut 2022; OFMSW lowered for garden-waste lignin with the Chandler 1980 slope (C1c)"),
+    P("Hydrolysis rate (per day)", "0.18 · 0.18 · 0.36 · 0.15", "Fisgativa 2020; Trzcinski & Stuckey 2012; Labatut 2022"),
+    P("Inorganic carbon (g C per kg solids)", "5.8 · 5.8 · 8.9 · 6.3", "Fisgativa 2020 Table 2"),
+    P("Cations and anions", "measured", "Fisgativa 2020 Table 5"),
   ],
-  notes: ["Each class's H/C and O/C come from one measured digestate, with no range: the main data gap in Pathway B.",
-          "The digestate's H and O therefore do not follow the sampled feed (C2)."],
-  code: [["ADM1/ad_characterization.py", "AD_CHARACTERIZATION"], ["ADM1/system_builder.py", "dried_basis_for_htc()"]], tests: ["tests/test_ad_characterization.py"], log: "C2" },
+  keep: ["Methane depends mainly on the digestible share and the total organic matter. The fat, protein and carbohydrate split moves it by less than 1 % (C1e).",
+         "With the earlier inputs, manure digesters turned acidic and some stopped producing methane. With the measured buffering, every Pathway B run of the pilot stays between pH 7.0 and 7.5 (C1d).",
+         "Over the sampled food wastes, the fat share has a median of 0.29, close to the 0.26 derived from the food waste data article."],
+  code: [["ADM1/ADM1.py", "kvl_cod_split()"]], tests: ["tests/test_pathway_b_feed.py"], log: "C1, C1c, C1d, C1e" },
 
-{ id: "upgrade", lane: "s", tag: "A + B", title: "Biogas upgrading and biomethane",
-  role: "Upgrades biogas to biomethane by pressure swing adsorption; biomethane replaces natural gas heat.",
-  inputs: "Digester methane and CO2; methane diverted to own heat use.",
-  outputs: "Biomethane (MJ); PSA electricity and methane slip.",
-  eq: `biomethane = (CH4 − CH4 burned on site) × 0.97                PSA recovery
-MJ_biomethane = Nm³ × 35.8 MJ/Nm³
-credit: 1 MJ biomethane displaces 1 MJ of natural gas boiler and furnace heat`,
+{ id: "digestate", lane: "b", tag: "Pathway B", title: "Digestate, dewatering and carbonization",
+  summary: "What leaves the digester is the feed minus the carbon that left as biogas. Its hydrogen and oxygen are set from measured digestates, because water taken up during digestion makes a direct balance impossible. The digestate is then dewatered and carbonized like any other feed.",
+  inputs: "The feed elements and the methane, CO₂ and ammonium from the digester.",
+  outputs: "The composition of the dewatered digestate as a dried sample, the centrate, and the inputs to the HTC reactor.",
+  steps: [
+    S("Carbon follows a mass balance: what entered minus what left in methane, CO₂ and the bicarbonate formed with the released ammonium.",
+      "C digestate = C feed − C in CH₄ − C in CO₂ − (12.011 / 14.007) × ammonium N"),
+    S("Hydrogen and oxygen are set from the carbon with molar ratios measured on real digestates. Ash and sulfur stay entirely in the solids.",
+      "H = C × (H/C)measured          O = C × (O/C)measured\nfixed carbon = r_FC × (100 − ash)"),
+    S("Drying a digestate drives off most of its ammonium, so the ammonium in the cake is moved to the process water before the HTC model sees the solids.",
+      "solids N for the HTC model = cake N − cake ammonium"),
+  ],
   params: [
-    P("PSA methane recovery", "0.97", "Model default (assumption)"),
-    P("LHV methane", "35.8 MJ/Nm³", "physical constant"),
-    P("Own-biogas heat efficiency", "1.0", "Relative to the displaced boiler (F12)"),
+    P("H/C and O/C, food waste", "1.39 and 0.523", "Cao et al. 2019, Table 2 (household waste digestate)"),
+    P("H/C and O/C, sewage sludge", "1.65 and 0.458", "Aragón-Briceño et al. 2020"),
+    P("H/C and O/C, dairy manure", "1.51 and 0.638", "Belete et al. 2021, Table 1"),
+    P("Fixed-carbon ratio", "0.149 to 0.308 by class", "Cao 2019; Tsai 2025; Pawlak-Kruczek 2020"),
   ],
-  notes: ["Own biogas and natural gas supply give nearly equal results by an energy identity, not a missing loss (F12).",
-          "The 1:1 credit is exact only if the displaced boilers deliver 1 MJ heat per MJ fuel; to check against ecoinvent fuel inputs (F12)."],
-  code: [["ADM1/system_builder.py", "STEP 6 biogas upgrading"]], tests: ["tests/test_heat_supply.py"], log: "D2, D9, F12" },
+  keep: ["Each class's H/C and O/C come from a single measured digestate, with no range. This is the main data gap in Pathway B.",
+         "Because of this, the feed's own hydrogen and oxygen do not reach Pathway B's HTC reactor directly (C2)."],
+  code: [["ADM1/ad_characterization.py", "ad_characterization.py"], ["ADM1/system_builder.py", "dried_basis_for_htc()"]], tests: ["tests/test_ad_characterization.py"], log: "C2" },
 
-{ id: "heat", lane: "s", tag: "A + B", title: "Heat integration and heat supply",
-  role: "Computes the heat the HTC reactor, dryer and digester need after internal heat recovery, and supplies it from electricity, natural gas or the plant's own biogas.",
-  inputs: "Stream masses and temperatures; province ambient temperature; heat supply choice.",
-  outputs: "Delivered heat per consumer; electricity or fuel bought; methane diverted.",
-  eq: `HTC:  Q_gross = m·cp·(T_HTC − T_feed),   Q_net = (1 − ε_HR)·Q_gross
-      Q_util = Q_net / (1 − F_loss,HTC) / 0.9       (electric heating, Paper 1)
-AD:   Q = m·cp·(35 − T_in) + F_loss,AD·m·cp·(35 − T_amb) − Q_recovered
-dryer: see Press and dryer;    cp = 4.18 kJ/kg·K`,
+{ id: "upgrade", lane: "s", tag: "Both pathways", title: "Biogas upgrading",
+  summary: "The biogas from either digester is upgraded to biomethane by pressure swing adsorption. The biomethane is used as heat and replaces natural gas heat from industrial boilers and furnaces.",
+  inputs: "Methane and CO₂ from the digester, minus any methane burned on site for the plant's own heat.",
+  outputs: "Biomethane and its energy, the upgrading electricity and the methane slip.",
+  steps: [
+    S("A fixed share of the methane is recovered in the biomethane; the rest is lost in the off-gas.",
+      "biomethane = ( methane − methane burned on site ) × 0.97\nenergy     = volume × 35.8 MJ/Nm³"),
+    S("Each megajoule of biomethane replaces one megajoule of natural gas heat.",
+      "credit = biomethane MJ × impact of 1 MJ natural gas boiler and furnace heat"),
+  ],
   params: [
-    P("Preheat effectiveness ε_HR", "0.55 (0.50–0.60)", "Two-stage flash preheating [1]; pinch target [2] (heat_integration)"),
-    P("Extra HTC loss", "0 (0–0.4)", "[1] reports about 0.4 for its design"),
-    P("Digester loss fraction", "0.2 (0.1–0.3)", "Checked against a wall-loss calculation"),
-    P("Ambient temperature", "province normal, 2.4–10.5 °C", "ECCC Canadian Climate Normals 1991–2020 (F11)"),
+    P("Methane recovery of the upgrading", "0.97", "Model default, stated as an assumption"),
+    P("Heating value of methane", "35.8 MJ/Nm³", "Physical constant"),
+    P("Heat from own biogas", "1 MJ per MJ methane", "Relative to the displaced boiler (F12)"),
   ],
-  notes: ["Pathway A's digester needs no heat in nearly every run: the hot process water covers it (F18).",
-          "Ecoinvent heat datasets carry no temperature level; HTC needs 180–260 °C (stated limitation, D1)."],
-  code: [["ADM1/heat_integration.py", "htc_duty(), ad_duty()"], ["ADM1/system_builder.py", "plan_heat_supply()"]], tests: ["tests/test_heat_supply.py", "tests/test_heat_integration_wall_loss.py"], log: "D1, F11, F12" },
+  keep: ["Using the plant's own biogas or buying natural gas gives almost the same result. That follows from the energy balance, not from a missing loss (F12).",
+         "The one-to-one credit is exact only if the replaced boilers deliver one megajoule of heat per megajoule of fuel. This can be checked against the ecoinvent fuel inputs (F12)."],
+  code: [["ADM1/system_builder.py", "system_builder.py"]], tests: ["tests/test_heat_supply.py"], log: "D2, D9, F12" },
 
-{ id: "lca", lane: "s", tag: "A + B", title: "Credits, regional context and impact scoring",
-  role: "Links the foreground to ecoinvent per province and scores three impact indicators; credits displaced industrial heat and natural gas heat.",
-  inputs: "Foreground inventory per tonne; province preset.",
-  outputs: "GWP100 (short term), human health, ecosystem quality, by contribution category.",
-  eq: `impact = Σ foreground flows × unit score of the background activity
-       + Σ foreground emissions × characterization factor
-hydrochar credit: industrial combustion heat mix of the province (NRCan CEUD 2023)
-biomethane credit: natural gas boilers and furnaces (CA-QC technology split)`,
+{ id: "heat", lane: "s", tag: "Both pathways", title: "Heat needs and heat supply",
+  summary: "The HTC reactor, the dryer and the digester all need heat. Part of it is recovered inside the plant. The rest is supplied by electricity, by natural gas, or by the plant's own biogas, and these three options are compared.",
+  inputs: "The masses and temperatures of the streams, the province's average temperature and the heat supply option.",
+  outputs: "The heat each unit needs, and the electricity, gas or biogas used to supply it.",
+  steps: [
+    S("The HTC slurry is heated from the incoming temperature to the reaction temperature. A share of that heat is recovered from the hot product by preheating the feed.",
+      "gross heat = mass × 4.18 kJ/kg·K × ( T reactor − T feed )\nnet heat   = ( 1 − preheat effectiveness ) × gross heat\nelectricity = net heat / ( 1 − extra loss ) / 0.9      (electric heating)"),
+    S("The digester is kept at 35 °C. It must heat the incoming stream and make up for losses to the surroundings, minus any heat recovered from the plant.",
+      "digester heat = m·cp·(35 − T in) + loss share × m·cp·(35 − T ambient) − heat recovered"),
+  ],
   params: [
-    P("Heat mix", "per province, electricity excluded", "NRCan CEUD 2023 Industrial Table 1 (D5, D6)"),
-    P("Natural gas heat credit", "4 boiler / furnace datasets", "ecoinvent 3.12 CA-QC market split (D9)"),
-    P("Methods", "IW+ 2.2.1 midpoint and damage", "IMPACT World+ regionalized for ecoinvent 3.12"),
+    P("Preheat effectiveness", "0.55 (0.50 to 0.60)", "Two-stage flash preheating [1] and pinch target [2] in heat_integration"),
+    P("Extra HTC heat loss", "0 (0 to 0.4)", "Reference [1] reports about 0.4 for its design"),
+    P("Digester heat-loss share", "0.2 (0.1 to 0.3)", "Checked against a wall-loss calculation"),
+    P("Ambient temperature", "2.4 to 10.5 °C by province", "ECCC Canadian Climate Normals 1991–2020 (F11)"),
   ],
-  notes: ["Provincial datasets exist only for electricity and wood chips CHP; fuel heat datasets are CA-QC in Quebec and RoW elsewhere (D8).",
-          "Attributional framing: average mixes for supply and for displaced products (C5)."],
-  code: [["ADM1/lca_contexts.py", "presets"], ["ADM1/hydrochar_enduse.py", "regional_heat_mix()"], ["ADM1/sweep_engine.py", "score(), precompute_scores()"]], tests: ["tests/test_lca_contexts.py"], log: "C5, D1–D11" },
+  keep: ["In Pathway A, the hot process water covers the digester's heat in nearly every run, so that digester buys no heat (F18).",
+         "The ecoinvent heat datasets have no temperature level, although HTC needs 180 to 260 °C. This is a stated limitation (D1)."],
+  code: [["ADM1/heat_integration.py", "htc_duty(), ad_duty()"], ["ADM1/system_builder.py", "plan_heat_supply()"]], tests: ["tests/test_heat_supply.py"], log: "D1, F11, F12" },
 
-{ id: "sweep", lane: "s", tag: "A + B", title: "Sweep engine and design",
-  role: "Runs the full design in parallel without Brightway writes: one ADM1 run per point, scored for every province and heat supply from precomputed unit scores.",
-  inputs: "Grid, sampled factors, fixed design.",
-  outputs: "One result file per point (resumable); pairs of A and B on the same sample.",
-  eq: `point = one simulation of one pathway (HTC + digestion) for one sample at one condition
-
-4 feedstocks × 100 samples                      = 400 samples
-  (composition, moisture and 15 uncertain parameters drawn together, Latin hypercube)
-× 6 HTC conditions (3 T × 2 RT)                 = 2,400
-× 4 runs: A at HRT 30 d + B at HRT 20 / 30 / 40 d
-                                                = 9,600 points (2,400 A, 7,200 B)
-
-each point scored for 11 provinces × 3 heat supplies (no new simulation)
-                                                = 316,800 impact results
-A–B pairs: each B point with the A point of the same sample, feedstock, T and RT
-                                                = 7,200 pairs × 33 = 237,600 comparisons
-one decision-map cell (feedstock × province × heat supply)
-                                                = 100 × 6 × 3 = 1,800 comparisons`,
+{ id: "lca", lane: "s", tag: "Both pathways", title: "Credits and environmental impacts",
+  summary: "The plant's inputs and outputs are linked to the ecoinvent database for the province where the plant stands. Hydrochar heat and biomethane are credited for the heat they replace. Three indicators are reported: climate change, human health and ecosystem quality.",
+  inputs: "The plant inventory per tonne of waste and the province.",
+  outputs: "Impacts per tonne, broken down by contribution.",
+  steps: [
+    S("Each impact is the sum, over everything the plant uses or emits, of the amount times its impact per unit, computed once per province.",
+      "impact = Σ amounts × impact per unit of the background process\n       + Σ emissions × characterization factor"),
+    S("Hydrochar heat replaces the province's average industrial combustion heat. Biomethane replaces heat from natural gas boilers and furnaces.",
+      "hydrochar credit   → provincial industrial heat mix (NRCan 2023)\nbiomethane credit  → natural gas boilers and furnaces"),
+  ],
   params: [
-    P("Samples per feedstock", "100", "Reused for every condition and both pathways; P(A beats B) per condition known to about ±5 %"),
-    P("Seed", "20261125", "main_v2"),
-    P("Feed chemistry", "fisgativa_kvl", "C1d, C1e"),
+    P("Industrial heat mix", "by province, electricity excluded", "NRCan Comprehensive Energy Use Database 2023, Industrial Table 1 (D5, D6)"),
+    P("Natural gas heat replaced", "four boiler and furnace datasets", "ecoinvent 3.12, Quebec technology split (D9)"),
+    P("Impact methods", "IMPACT World+ 2.2.1", "Regionalized version for ecoinvent 3.12"),
   ],
-  notes: ["Morris screening (6,720 points) chose what to grid, sample and fix (F9, F13).",
-          "Runtime about 19.6 h on 12 workers."],
-  code: [["ADM1/sweep_engine.py", "make_points(), run_sweep()"], ["notebooks/main_sweep.ipynb", ""]], tests: ["tests/test_sweep_engine.py"], log: "F4, F9, F13, F17" },
+  keep: ["Only electricity and wood-chip cogeneration have province-specific datasets. Fuel heat is Quebec-specific in Quebec and global elsewhere (D8).",
+         "The assessment is attributional: average mixes are used both for what the plant buys and for what it replaces (C5)."],
+  code: [["ADM1/lca_contexts.py", "lca_contexts.py"], ["ADM1/sweep_engine.py", "score()"]], tests: ["tests/test_lca_contexts.py"], log: "C5, D1 to D11" },
+
+{ id: "sweep", lane: "s", tag: "Both pathways", title: "How many simulations",
+  summary: "A point is one simulation of one plant: one sampled waste, through carbonization and digestion, at one operating condition. Points are the expensive part. Each point is then scored for every province and heat supply, which costs almost nothing.",
+  inputs: "The grid, the sampled factors and the fixed design.",
+  outputs: "One result file per point, so an interrupted run can resume.",
+  steps: [
+    S("Each feedstock gets 100 samples. A sample draws the composition, the moisture and the fifteen uncertain parameters together, by Latin hypercube.",
+      "4 feedstocks × 100 samples = 400 samples"),
+    S("Every sample is run at six HTC conditions, once for Pathway A and three times for Pathway B, one per digester residence time.",
+      "400 × 6 conditions (3 temperatures × 2 residence times) = 2,400\n× 4 runs (A at 30 d, B at 20, 30 and 40 d)          = 9,600 points"),
+    S("Each point is scored for every province and heat supply. Pathway A and B are compared on the same sample.",
+      "9,600 points × 11 provinces × 3 heat supplies = 316,800 results\none feedstock, province and heat supply → 1,800 A-against-B comparisons"),
+  ],
+  params: [
+    P("Samples per feedstock", "100", "Used for every condition and both pathways; the share of runs in which A wins is known to about ±5 % per condition"),
+    P("Feed chemistry of Pathway B", "measured + electron balance", "C1d, C1e"),
+    P("Run time", "about 19.6 hours on 12 cores", "Pilot run, main_v2"),
+  ],
+  keep: ["A first screening with 6,720 points decided which inputs to put on a grid, which to sample and which to fix (F9, F13)."],
+  code: [["ADM1/sweep_engine.py", "sweep_engine.py"], ["notebooks/main_sweep.ipynb", "main_sweep.ipynb"]], tests: ["tests/test_sweep_engine.py"], log: "F4, F9, F13, F17" },
 ];
 
 const EVIDENCE = [
-  ["Paper 1 results reproduced", "142 / 142 tests pass", "ok", "Frozen Paper 1 base case, caps, heat supply, sampler, feed chemistry and sweep engine tests (paper2-dev)."],
-  ["Engine against full Brightway LCA", "≤ 2×10⁻⁷ relative difference", "ok", "Two probe points, three methods, Alberta and Nova Scotia (main_v2)."],
-  ["HTC surrogate skill, grouped by study", "R² yield 0.28, HHV 0.58, C 0.76", "warn", "Out-of-study skill is much lower than random cross-validation (0.87, 0.91, 0.94); error not yet sampled (C0, F2)."],
-  ["Sampled compositions in surrogate domain", "100 %", "ok", "All four classes, both temperatures, both residence times (F16)."],
-  ["Every sampled input reaches the result", "yes, with 3 stated exceptions", "ok", "One-at-a-time check, 172 builds: NOx conversion inert under emission caps, VM/FC not used by B's digester, A's digester heat always covered (F18)."],
-  ["Pathway B digesters stable", "0 of 144 pilot points below pH 6.8", "ok", "Measured feed chemistry fixed the manure acidification (C1d, C1e)."],
+  ["The Paper 1 results are reproduced", "142 of 142 tests pass", "ok", "The submitted Paper 1 base case is frozen in a test, together with the checks on caps, heat supply, sampling, feed chemistry and the sweep engine."],
+  ["The fast engine matches a full LCA", "within 2 × 10⁻⁷", "ok", "Two plants were rebuilt in Brightway and computed in full, for Alberta and Nova Scotia, on all three indicators."],
+  ["The HTC model on unseen studies", "R² yield 0.28 · HHV 0.58 · C 0.76", "warn", "On studies it was not trained on, the model is much less accurate than random cross-validation suggests (0.87, 0.91, 0.94). Its error is not yet part of the uncertainty analysis."],
+  ["Sampled wastes stay within the training data", "100 %", "ok", "All four classes, at both temperatures and both residence times."],
+  ["Every sampled input reaches the result", "yes, with three stated exceptions", "ok", "Each input was moved across its range on its own (172 runs). Three have no effect by design: the NOx share under the emission caps, volatile matter in Pathway B's digester, and Pathway A's digester heat."],
+  ["Pathway B digesters are stable", "0 of 144 below pH 6.8", "ok", "Measured feed buffering removed the acidification of manure digesters seen with the earlier inputs."],
 ];
 
 const QUESTIONS = [
-  ["HTC surrogate error", "Include it in the sweep (for example by sampling grouped cross-validation residuals by domain distance) or report results as conditional on the surrogate? Out-of-study R² for yield is 0.28 (C0, F2)."],
-  ["Process-water fractionation in Pathway A", "Soluble share 0.75, VFA 0.05 and the VFA split have no source in the code; lipid and protein caps bind in the pilot. Source them, or apply the Kleerebezem split as in Pathway B?"],
-  ["Digestate composition in Pathway B", "H/C and O/C come from one digestate per class. Use digestate rows of the HTC dataset as ranges, or accept as a stated limitation (C2)?"],
-  ["Flue gas treatment", "Emission limits are treated as free. Accept with a bounding check after the sweep (F19), or model treatment for sludge?"],
+  ["Should the HTC model's error be part of the uncertainty?", "On studies it has not seen, the model explains only 28 % of the variation in yield. I would sample its error, using the cross-validation residuals of studies at a similar distance from the training data. The alternative is to state that the results are conditional on the model."],
+  ["How should the process water enter the digester in Pathway A?", "The dissolved share, the VFA share and the VFA split have no reference yet, and fat and protein shares are capped in the pilot. I would apply the same electron balance as in Pathway B to the process-water composition."],
+  ["Is one measured digestate per class enough?", "The digestate's hydrogen and oxygen come from a single sample per class. I would add ranges from the digestate experiments in the HTC dataset, which covers mostly agricultural digestates."],
+  ["Can the emission limits be treated as free?", "Meeting them for sludge needs removing about 89 % of the SO₂. I would add a generous treatment burden after the sweep and check whether any ranking changes, and model treatment in detail only where it does."],
 ];
 
-const cardsEl = document.getElementById("cards");
-cardsEl.innerHTML = CARDS.map(c => `
-<article class="card" id="${c.id}">
-  <div class="card-head"><span class="tag ${c.lane}">${c.tag}</span><h3>${c.title}</h3></div>
-  <p class="role">${c.role}</p>
-  <div class="io"><div><div class="label">Inputs</div>${c.inputs}</div><div><div class="label">Outputs</div>${c.outputs}</div></div>
-  <div><div class="label">Equations as coded</div><div class="eq">${c.eq.replace(/</g, "&lt;")}</div></div>
-  <div class="tbl"><table><thead><tr><th>Parameter</th><th>Value</th><th>Source</th></tr></thead><tbody>
-    ${c.params.map(p => `<tr><td>${p.name}</td><td class="v">${p.value}</td><td class="src${p.none ? " none" : ""}">${p.none ? "no source · " : ""}${p.source}</td></tr>`).join("")}
-  </tbody></table></div>
-  <div><div class="label">Assumptions, caps and limitations</div><ul class="notes">
-    ${c.notes.map(n => `<li>${n}</li>`).join("")}${(c.caps || []).map(n => `<li class="cap">${n}</li>`).join("")}
-  </ul></div>
-  <div class="refs"><span><span class="label">Code</span> ${c.code.map(([f, fn]) => code(f, fn)).join(" · ")}</span>
-    <span><span class="label">Tests</span> ${c.tests.map(t => code("ADM1/" + t, "")).join(" · ")}</span>
-    <span><span class="label">Decision log</span> ${c.log}</span></div>
+const color = l => l === "a" ? "var(--a)" : l === "b" ? "var(--b)" : "var(--s)";
+document.getElementById("jump").innerHTML = UNITS.map(u =>
+  `<a href="#${u.id}" data-card="${u.id}"><span class="dot" style="background:${color(u.lane)}"></span>${u.title}</a>`).join("");
+
+document.getElementById("units").innerHTML = UNITS.map(u => `
+<article class="unit ${u.lane}" id="${u.id}">
+  <div class="unit-head"><span class="tag ${u.lane}">${u.tag}</span><h3>${u.title}</h3></div>
+  <p class="summary read">${u.summary}</p>
+  <div class="io">
+    <div><h4>What goes in</h4><p>${u.inputs}</p></div>
+    <div><h4>What comes out</h4><p>${u.outputs}</p></div>
+  </div>
+  <div class="steps"><h4>How it is calculated</h4>
+    ${u.steps.map(s => `<div class="step"><p>${s.text}</p><div class="formula">${s.formula.replace(/</g, "&lt;")}</div></div>`).join("")}
+  </div>
+  <div class="steps"><h4>Values used</h4>
+    <div class="tbl"><table><thead><tr><th>What</th><th>Value</th><th>Where it comes from</th></tr></thead><tbody>
+      ${u.params.map(p => `<tr><td>${p.name}</td><td class="v">${p.value}</td><td class="src">${p.none ? '<span class="none">no source</span>' : ""}${p.source}</td></tr>`).join("")}
+    </tbody></table></div>
+  </div>
+  <div class="steps"><h4>What to keep in mind</h4>
+    <ul class="keep">${u.keep.map(k => `<li>${k}</li>`).join("")}${(u.caps || []).map(k => `<li class="cap"><span class="capnote">CAP</span>${k}</li>`).join("")}</ul>
+  </div>
+  <div class="where">
+    <div><b>Code</b>${u.code.map(([f, l]) => link(f, l)).join(" · ")}</div>
+    <div><b>Tested by</b>${u.tests.map(t => link("ADM1/" + t)).join(" · ")}</div>
+    <div><b>Decision log</b><span>${u.log}</span></div>
+  </div>
 </article>`).join("");
 
 document.getElementById("evidence").innerHTML = EVIDENCE.map(([t, n, s, d]) =>
-  `<div class="ev"><span class="label">${t}</span><span class="num ${s}">${n}</span><p>${d}</p></div>`).join("");
+  `<div class="ev"><div class="row"><h4>${t}</h4><span class="num ${s}">${n}</span></div><p>${d}</p></div>`).join("");
 document.getElementById("questions").innerHTML = QUESTIONS.map(([t, d]) =>
   `<div class="q"><h3>${t}</h3><p>${d}</p></div>`).join("");
 
-function openCard(id, scroll) {
+function openUnit(id, scroll) {
   document.querySelectorAll(".node").forEach(n => n.classList.toggle("active", n.dataset.card === id));
-  document.querySelectorAll(".card").forEach(c => c.classList.toggle("hl", c.id === id));
+  document.querySelectorAll(".unit").forEach(c => c.classList.toggle("hl", c.id === id));
   const el = document.getElementById(id);
   if (el && scroll) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
+function go(id) { try { history.replaceState(null, "", "#" + id); } catch (e) {} openUnit(id, true); }
 document.querySelectorAll(".node").forEach(n => {
-  const go = () => { try { history.replaceState(null, "", "#" + n.dataset.card); } catch (e) {} openCard(n.dataset.card, true); };
-  n.addEventListener("click", go);
-  n.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  n.addEventListener("click", () => go(n.dataset.card));
+  n.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(n.dataset.card); } });
 });
+document.querySelectorAll(".jump a").forEach(a => a.addEventListener("click", e => { e.preventDefault(); go(a.dataset.card); }));
 const start = (location.hash || "").slice(1);
-if (start && document.getElementById(start)) openCard(start, true);
-window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (document.getElementById(h)) openCard(h, true); });
+if (start && document.getElementById(start)) openUnit(start, true);
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (document.getElementById(h)) openUnit(h, true); });
 </script>
