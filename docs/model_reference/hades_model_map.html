@@ -132,6 +132,10 @@ ul.keep li.cap::marker { color: var(--flag); }
 .q { padding: 22px 24px; border-radius: 10px; background: var(--flag-soft); display: grid; gap: 8px; }
 .q h3 { font-size: 1.15rem; color: var(--flag); }
 .q p { font-size: 1.02rem; }
+.why { gap: 34px; }
+.why-item { display: grid; gap: 14px; max-width: 70ch; }
+.why-item h3 { font-size: 1.25rem; }
+.why-item em { font-style: italic; color: var(--fg); }
 .pill { display: inline-block; font-family: var(--font-ui); font-size: .78rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
 .pill.sampled { background: var(--a-soft); color: var(--a); }
 .pill.grid { background: var(--b-soft); color: var(--b); }
@@ -159,6 +163,50 @@ footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line);
   </div>
   <div class="facts"><span><b>Branch</b> paper2-dev</span><span><b>Functional unit</b> 1 t wet feedstock</span><span><b>Background</b> ecoinvent 3.12 cut-off</span><span><b>Impact methods</b> IMPACT World+ 2.2.1</span><span><b>State</b> 26 November 2026</span></div>
 </header>
+
+<section class="block why" id="why">
+  <h2>Why this study is built the way it is</h2>
+
+  <div class="why-item">
+    <h3>The question</h3>
+    <p>Paper 1 compared the two pathways for one waste in one place: food waste in Quebec. Pathway B came out ahead, by a few kilograms of CO₂ equivalent per tonne. Moving the same plant to Ontario reversed the ranking, and in both provinces the gap was only 5 to 8 % of the totals (D10, D11). A difference that small, and that sensitive to place, cannot be generalized from one case.</p>
+    <p>Paper 2 therefore asks a broader question: <em>for each type of waste, each province and each way of supplying heat, how often does one pathway have the lower impact, and what tips the balance?</em> The answer is a decision map rather than a single number, with the conditions under which the recommendation changes.</p>
+  </div>
+
+  <div class="why-item">
+    <h3>Why so many simulations</h3>
+    <p>A share of wins needs many runs. Each run draws a different composition of the waste and different values for the uncertain parameters, and the result is the share of runs in which Pathway A beats Pathway B. With 100 runs per operating condition, that share is known to within about ±5 percentage points. With 50 runs it would be ±7, with 20 runs ±11, too coarse to say whether a pathway wins 40 % or 60 % of the time.</p>
+    <p>The conditions a reader can choose multiply the runs: four wastes, three temperatures, two residence times, and for Pathway B three digester residence times. That gives 2,400 runs for Pathway A and 7,200 for Pathway B. Provinces and heat supply options cost almost nothing on top, because each run is scored for all of them from the same simulation. That is why all eleven provinces and all three heat options are included rather than a selection.</p>
+    <p>The same 100 samples are used for both pathways. A and B are always compared on the same waste with the same uncertain values, so a difference between them comes from the pathway, not from a different draw.</p>
+  </div>
+
+  <div class="why-item">
+    <h3>Why fewer simulations would not do</h3>
+    <p>A first screening of 6,720 runs (the Morris method) already showed which inputs matter most (F9). A screening ranks inputs; it cannot say how likely each pathway is to win. The main sweep is what turns the model into probabilities, and probabilities need the sample size above.</p>
+    <p>Adding more uncertain inputs does not add runs. With Latin hypercube sampling, the number of runs depends only on the sample size, not on how many inputs are drawn. So inputs the screening found unimportant are still sampled rather than fixed: it costs nothing and is more honest.</p>
+  </div>
+
+  <div class="why-item">
+    <h3>Why the dilution targets are fixed</h3>
+    <p>The screening showed that the comparison was driven mainly by three design choices: how much water the HTC slurry contains, how far the process water is diluted before digestion, and the solids content of the Pathway B digester (F9). These are not uncertainties. They are decisions a plant designer makes, and the ranges tested in the screening were chosen by the author.</p>
+    <p>Sampling them would have made the share of wins depend on those chosen ranges. Putting them on a grid would have shown a trend that is already known (diluting less always favours the pathway concerned, F10), would have included designs no engineer would build, would have made it unclear which Pathway A design to compare with which Pathway B design, and would have multiplied the runs by four. They are therefore fixed at realistic design values: 85 % water in the HTC slurry, 25 kg COD/m³ for the process water, 10 % solids in the Pathway B digester (F13). Their effect will be shown in a separate, smaller sensitivity run.</p>
+  </div>
+
+  <div class="why-item">
+    <h3>Why the waste composition varies</h3>
+    <p>Food waste in one city is not food waste in another. Drawing a different realistic composition for each run shows whether a recommendation holds for a whole class of waste, and which property flips it, for example ash content or moisture. A practitioner can then place their own waste on the map (F15, F16).</p>
+  </div>
+
+  <div class="why-item">
+    <h3>Why these operating conditions</h3>
+    <p>The HTC temperatures of 180, 220 and 240 °C each sit in a well-populated part of the data the HTC model was trained on, and 60 and 240 minutes bracket the residence times most studies use. The digester residence time is varied only for Pathway B, which digests solid waste that takes time to break down. Pathway A digests process water that is already dissolved, so its residence time hardly matters and is fixed at 30 days (C1b, F13).</p>
+  </div>
+
+  <div class="why-item">
+    <h3>What the results will and will not say</h3>
+    <p>For each waste, province and heat supply, the sweep will give the share of runs in which Pathway A beats Pathway B, how that share changes with temperature, residence time and the digester design, and which sampled inputs drive the difference. It does not yet include the HTC model's own prediction error (F2), so these shares are conditional on that model; whether to include it is one of the decisions at the end of this page. It is an environmental assessment only; costs are not part of this study.</p>
+  </div>
+</section>
 
 <section class="block">
   <h2>The two plants</h2>
@@ -614,7 +662,7 @@ document.getElementById("t-computed").innerHTML = COMPUTED.map(([n, v, a, l]) =>
 document.getElementById("t-fixed").innerHTML = FIXED.map(([n, v, a, why]) => `<tr><td>${n}</td><td class="v" style="white-space:normal">${v}</td><td>${actOn(a)}</td><td class="src">${why}</td></tr>`).join("");
 
 const color = l => l === "a" ? "var(--a)" : l === "b" ? "var(--b)" : "var(--s)";
-document.getElementById("jump").innerHTML = `<a href="#vary" data-card="vary"><span class="dot" style="background:var(--fg)"></span>What the sweep varies</a>` + UNITS.map(u =>
+document.getElementById("jump").innerHTML = `<a href="#why" data-card="why"><span class="dot" style="background:var(--fg)"></span>Why this study</a><a href="#vary" data-card="vary"><span class="dot" style="background:var(--fg)"></span>What the sweep varies</a>` + UNITS.map(u =>
   `<a href="#${u.id}" data-card="${u.id}"><span class="dot" style="background:${color(u.lane)}"></span>${u.title}</a>`).join("");
 
 document.getElementById("units").innerHTML = UNITS.map(u => `
