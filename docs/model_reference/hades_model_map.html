@@ -453,6 +453,15 @@ const UNITS = [
   code: [["ADM1/system_builder.py", "system_builder.py"]], tests: ["tests/test_heat_supply.py"], log: "D2, D9, F12" },
 
 { id: "heat", lane: "s", tag: "Both pathways", title: "Heat needs and heat supply",
+  extra: `<div class="steps"><h4>The three heat supply scenarios</h4>
+    <p class="read">Three units need heat: the HTC reactor, the hydrochar dryer and the digester. Every simulation is scored three times, once per scenario, so the same plant can be compared under each way of supplying that heat. Grid electricity for pumps, mixers, the press and the upgrading is bought from the province's grid in all three.</p>
+    <div class="tbl"><table><thead><tr><th>Scenario</th><th>HTC reactor</th><th>Dryer</th><th>Digester</th><th>What it represents</th></tr></thead><tbody>
+      <tr><td><b>Paper 1</b><br><span class="pill fixed">paper1</span></td><td>Grid electricity, heater efficiency 0.90</td><td>Grid electricity, 1 kWh per 3.6 MJ</td><td>Natural gas boiler</td><td>The configuration of the submitted Paper 1. Favourable where the grid is low-carbon (Quebec), penalizing on fossil grids (Alberta).</td></tr>
+      <tr><td><b>All natural gas</b><br><span class="pill fixed">all_ng</span></td><td>Natural gas boiler</td><td>Natural gas boiler</td><td>Natural gas boiler</td><td>A plant that buys all its heat as natural gas, the common industrial practice. Removes the grid's carbon intensity from the heat supply.</td></tr>
+      <tr><td><b>Own biogas</b><br><span class="pill fixed">own_biogas</span></td><td colspan="3">The plant's own raw biogas, taken before upgrading and burned on site: first for the digester, then the HTC reactor, then the dryer. Any shortfall comes from a natural gas boiler.</td><td>A self-supplied plant. Every megajoule of methane burned on site is a megajoule less biomethane sold.</td></tr>
+    </tbody></table></div>
+    <p class="read">The natural gas boiler is the ecoinvent 3.12 dataset "heat production, natural gas, at boiler condensing modulating >100kW" for the province (CA-QC in Quebec, RoW elsewhere), counted as delivered heat. Own biogas delivers 1 MJ of heat per MJ of methane, the same convention as the biomethane credit, so the own-biogas and all-natural-gas scenarios differ only by the upgrading losses avoided and the combustion emissions (F12). In the Paper 1 base case, Pathway A burns all its methane and still needs natural gas for part of the HTC and dryer heat, while Pathway B covers all its heat and still exports about 70 % of its biomethane (D1).</p>
+  </div>`,
   summary: "The HTC reactor, the dryer and the digester all need heat. Part of it is recovered inside the plant. The rest is supplied by electricity, by natural gas, or by the plant's own biogas, and these three options are compared.",
   inputs: "The masses and temperatures of the streams, the province's average temperature and the heat supply option.",
   outputs: "The heat each unit needs, and the electricity, gas or biogas used to supply it.",
@@ -539,7 +548,7 @@ const GRID = [
   ["HTC residence time", "60 · 240 min", "both", "F13"],
   ["Digester residence time", "Pathway B: 20 · 30 · 40 d   (Pathway A: fixed at 30 d)", "B", "F13"],
   ["Province", "QC · ON · MB · SK · AB · BC · NB · NS · PE · NL · YT", "both", "D3, F11"],
-  ["Heat supply", "Paper 1 (electric HTC) · all natural gas · own biogas", "both", "D1"],
+  ["Heat supply", "Paper 1 (electric HTC and dryer, gas digester) · all natural gas · own biogas; see <a href=\"#heat\">Heat needs and heat supply</a>", "both", "D1, F12"],
 ];
 const CLASS_ROWS = [
   ["sub", "Composition (% dry, central value in brackets); drawn together, oxygen by difference (F15, F16)"],
@@ -619,6 +628,7 @@ document.getElementById("units").innerHTML = UNITS.map(u => `
   <div class="steps"><h4>How it is calculated</h4>
     ${u.steps.map(s => `<div class="step"><p>${s.text}</p><div class="formula">${s.formula.replace(/</g, "&lt;")}</div></div>`).join("")}
   </div>
+  ${u.extra || ""}
   <div class="steps"><h4>Values used</h4>
     <div class="tbl"><table><thead><tr><th>What</th><th>Value</th><th>In the sweep</th><th>Where it comes from</th></tr></thead><tbody>
       ${u.params.map(p => `<tr><td>${p.name}</td><td class="v">${p.value}</td><td>${pill(p.sweep)}</td><td class="src">${p.none ? '<span class="none">no source</span>' : ""}${p.source}</td></tr>`).join("")}
