@@ -24,6 +24,11 @@ Branches: `main` and tag `waste-management-submission` hold the submitted Paper 
 ### A3. Decision log kept by request, no CLAUDE.md (2026-11-22)
 **Decision.** This log is updated with every decision, in the same commit as the code change. No instruction file is added to the repository; the user asks for the log to be kept updated at the start of each session.
 
+
+### A4. Model documentation generated from the code (2026-11-26)
+**Decision.** Documentation for the supervisors, the paper's SI and the thesis in four layers: system diagram, one card per process step (inputs, equations, parameters with value, range and source, assumptions and caps, code location, verifying test), evidence (validations, screening, propagation and chemistry checks), and this log as the audit trail. The parameter table is generated from the code by `docs/model_reference/extract_parameters.py` (module constants, numeric SystemContext defaults, numbers hard-coded in functions, with the comments next to them), so it cannot drift from what the model computes. Every constant and equation added to the code carries its source in a comment (user's rule, 2026-11-26).
+**First extraction.** 143 entries: 35 cited next to the value, 39 cited within 25 lines above (to check), 6 stated assumptions, 34 physical constants, 4 solver settings, and the rest without source. Main gaps: Pathway A process-water fractionation in `derive_adm1_fractions` (soluble share 0.75, VFA share 0.05, VFA split 0.90 / 0.05 / 0.04 / 0.01), digestate ammonium share 0.70 in `compute_S_IN`, the 0.04 kmol/m³ base of the legacy charge balance, inoculum 12 kg VS/m³ (batch), process-water density 1.02, the default COD target 10 kg/m³ and ISR 2.
+
 ---
 
 ## B. Coding traps fixed before sweeps
