@@ -132,6 +132,18 @@ ul.keep li.cap::marker { color: var(--flag); }
 .q { padding: 22px 24px; border-radius: 10px; background: var(--flag-soft); display: grid; gap: 8px; }
 .q h3 { font-size: 1.15rem; color: var(--flag); }
 .q p { font-size: 1.02rem; }
+.pill { display: inline-block; font-family: var(--font-ui); font-size: .78rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.pill.sampled { background: var(--a-soft); color: var(--a); }
+.pill.grid { background: var(--b-soft); color: var(--b); }
+.pill.fixed { background: var(--s-soft); color: var(--s); }
+.pill.computed { background: var(--panel); color: var(--ok); border: 1px solid var(--ok); }
+.pill.none { color: var(--muted); }
+.vary h3 { font-size: 1.25rem; margin-top: 18px; }
+.vary .intro { color: var(--soft); max-width: 68ch; }
+.vary td.cls { font-family: var(--font-mono); font-size: .86rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vary td.cls.fx { color: var(--muted); }
+.vary th.cls { white-space: nowrap; }
+.vary tr.sub td { background: var(--bg); font-family: var(--font-ui); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
 footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: .98rem; display: grid; gap: 10px; }
 @media (max-width: 600px) { body { font-size: 17px; } h1 { font-size: 2rem; } .unit { margin-top: 56px; } }
 </style>
@@ -205,6 +217,23 @@ footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line);
   <nav class="jump" id="jump" aria-label="Jump to a unit"></nav>
 </section>
 
+
+<section class="block vary" id="vary">
+  <h2>What the sweep varies</h2>
+  <p class="intro">Every input of the main sweep falls in one of four groups. <span class="pill grid">grid</span> inputs are combined in every possible way, because a reader picks them: the waste, the plant settings, the province. <span class="pill sampled">sampled</span> inputs are uncertain or vary within a class; each simulation draws its own value. <span class="pill computed">from the sample</span> values are not drawn themselves but are calculated from what was drawn. <span class="pill fixed">fixed</span> values are the same in every run.</p>
+  <h3>Grid</h3>
+  <div class="tbl"><table><thead><tr><th>Input</th><th>Levels</th><th>Acts on</th><th>Log</th></tr></thead><tbody id="t-grid"></tbody></table></div>
+  <h3>Sampled, with a different range for each feedstock</h3>
+  <p class="intro">Drawn by Latin hypercube for each of the 100 samples per feedstock. A grey value is fixed for that feedstock because the source gives no range.</p>
+  <div class="tbl"><table><thead><tr><th>Input</th><th class="cls">Food waste</th><th class="cls">OFMSW</th><th class="cls">Sewage sludge</th><th class="cls">Dairy manure</th><th>Acts on</th></tr></thead><tbody id="t-class"></tbody></table></div>
+  <h3>Sampled, with the same range for every feedstock</h3>
+  <div class="tbl"><table><thead><tr><th>Input</th><th>Range</th><th>Acts on</th><th>Where it comes from</th></tr></thead><tbody id="t-common"></tbody></table></div>
+  <h3>Calculated from each sample</h3>
+  <div class="tbl"><table><thead><tr><th>Value</th><th>How</th><th>Acts on</th><th>Log</th></tr></thead><tbody id="t-computed"></tbody></table></div>
+  <h3>Fixed in every run</h3>
+  <div class="tbl"><table><thead><tr><th>Input</th><th>Value</th><th>Acts on</th><th>Why fixed</th></tr></thead><tbody id="t-fixed"></tbody></table></div>
+</section>
+
 <div id="units"></div>
 
 <section class="block">
@@ -228,7 +257,7 @@ footer { margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--line);
 <script>
 const GH = "https://github.com/KassemHouussaini/HADES/blob/paper2-dev/";
 const link = (f, label) => `<a href="${GH}${f.replace(/ /g, "%20")}" target="_blank" rel="noopener"><code>${label || f.split("/").pop()}</code></a>`;
-const P = (name, value, source, none) => ({ name, value, source, none: !!none });
+const P = (name, value, source, none, sweep) => ({ name, value, source, none: !!none, sweep: sweep || "—" });
 const S = (text, formula) => ({ text, formula });
 
 const UNITS = [
@@ -245,9 +274,9 @@ const UNITS = [
       "x_O = 100 / ( 1 + Σ exp(y_i) )        x_i = x_O · exp(y_i)"),
   ],
   params: [
-    P("Class ranges and central values", "table F15", "Your literature table, the food waste data article (Table 3) and the HTC training dataset"),
-    P("How the elements move together", "17 food waste, 16 sludge compositions", "HTC training dataset after cleaning (F14); manure and OFMSW use the pooled within-class correlation of all classes"),
-    P("Sulfur reported as zero", "replaced by 0.01 %", "A logarithm of zero is undefined; method choice", true),
+    P("Class ranges and central values", "table F15", "Your literature table, the food waste data article (Table 3) and the HTC training dataset", false, "sampled"),
+    P("How the elements move together", "17 food waste, 16 sludge compositions", "HTC training dataset after cleaning (F14); manure and OFMSW use the pooled within-class correlation of all classes", false, "fixed"),
+    P("Sulfur reported as zero", "replaced by 0.01 %", "A logarithm of zero is undefined; method choice", true, "fixed"),
   ],
   keep: ["Every sampled composition lies inside the region where the HTC model was trained (distance 0.7 to 1.6 against a limit of 2.5).",
          "Sewage sludge means raw mixed sludge, primary plus waste activated, arriving as dewatered cake. Digested sludge, above about 45 % ash, is outside the class."],
@@ -264,10 +293,10 @@ const UNITS = [
       "digester feed TS = min( feed TS , 10 % )"),
   ],
   params: [
-    P("HTC slurry moisture", "0.85", "Your design value (F13); inside the HTC training data (median 0.90)"),
-    P("Pathway A digester feed", "25 kg COD/m³", "Your design value (F13); literature support to add"),
-    P("Pathway B digester feed", "10 % TS", "Your design value (F13); wet digestion"),
-    P("Digester residence time", "A: 30 d · B: 20, 30, 40 d", "Process water is already dissolved, so time does not limit Pathway A (C1b)"),
+    P("HTC slurry moisture", "0.85", "Your design value (F13); inside the HTC training data (median 0.90)", false, "fixed"),
+    P("Pathway A digester feed", "25 kg COD/m³", "Your design value (F13); literature support to add", false, "fixed"),
+    P("Pathway B digester feed", "10 % TS", "Your design value (F13); wet digestion", false, "fixed"),
+    P("Digester residence time", "A: 30 d · B: 20, 30, 40 d", "Process water is already dissolved, so time does not limit Pathway A (C1b)", false, "grid (B)"),
   ],
   keep: ["These targets are fixed, not sampled. In the screening they dominated the comparison, and sampling them would have made the answer depend on ranges chosen by the author (F9).",
          "For sewage sludge, 10 % solids implies a high-solids or thermal-hydrolysis digester; conventional ones run at 4 to 7 %. This is a stated limitation."],
@@ -286,10 +315,10 @@ const UNITS = [
       "distance to nearest training point ≤ 2.50   (otherwise flagged)"),
   ],
   params: [
-    P("Training data", "938 experiments", "HTC literature compilation (HTC_dataset_paper.xlsx)"),
-    P("Accuracy, random cross-validation", "R² yield 0.87, HHV 0.91, C 0.94", "C0"),
-    P("Accuracy on studies not seen in training", "R² yield 0.28, HHV 0.58, C 0.76", "C0: the honest measure for a new waste"),
-    P("Distance limit", "2.50", "C0b; Sahigara et al. 2012; Roy, Kar & Ambure 2015"),
+    P("Training data", "938 experiments", "HTC literature compilation (HTC_dataset_paper.xlsx)", false, "fixed"),
+    P("Accuracy, random cross-validation", "R² yield 0.87, HHV 0.91, C 0.94", "C0", false, "—"),
+    P("Accuracy on studies not seen in training", "R² yield 0.28, HHV 0.58, C 0.76", "C0: the honest measure for a new waste", false, "—"),
+    P("Distance limit", "2.50", "C0b; Sahigara et al. 2012; Roy, Kar & Ambure 2015", false, "fixed"),
   ],
   keep: ["The model responds to every composition input, but in small steps rather than smoothly. A small change in input can move the hydrochar energy by several percent (F18).",
          "In Pathway A, the methane comes from process-water carbon taken by difference, which magnifies any error in the predicted hydrochar carbon (F18).",
@@ -307,9 +336,9 @@ const UNITS = [
       "press electricity = dry hydrochar × 25 kWh per tonne of solids"),
   ],
   params: [
-    P("Moisture after the press", "0.35 (0.30 to 0.50)", "Heat-integration references in the module header"),
-    P("Dryer heat", "3.6 MJ/kg water (1.8 to 4.32)", "Belt dryer reference [10] in heat_integration"),
-    P("Press electricity", "25 kWh/t solids (20 to 30)", "heat_integration"),
+    P("Moisture after the press", "0.35 (0.30 to 0.50)", "Heat-integration references in the module header", false, "sampled"),
+    P("Dryer heat", "3.6 MJ/kg water (1.8 to 4.32)", "Belt dryer reference [10] in heat_integration", false, "sampled"),
+    P("Press electricity", "25 kWh/t solids (20 to 30)", "heat_integration", false, "sampled"),
   ],
   keep: ["The press electricity changes the totals by at most 0.2 % (F18)."],
   code: [["ADM1/heat_integration.py", "dryer_duty()"]], tests: ["tests/test_system_builder_pure.py"], log: "F3" },
@@ -325,9 +354,9 @@ const UNITS = [
       "SO₂ = 2 × S          NOx = N × conversion × 46/14\nemitted = min( estimate , limit × flue gas volume at 6 % O₂ )\nremoved = estimate − emitted      (recorded, not yet counted as a burden)"),
   ],
   params: [
-    P("Heating value of the reference coal", "30.42 MJ/kg", "ecoinvent hard coal furnace, net-to-gross corrected"),
-    P("Limits NOx, SO₂, dust", "500, 400, 50 mg/Nm³", "Directive (EU) 2015/2193, Annex II, new plants of 1 to 5 MW"),
-    P("Share of fuel N emitted as NOx", "0.10 (0.01 to 0.25)", "hydrochar_enduse"),
+    P("Heating value of the reference coal", "30.42 MJ/kg", "ecoinvent hard coal furnace, net-to-gross corrected", false, "fixed"),
+    P("Limits NOx, SO₂, dust", "500, 400, 50 mg/Nm³", "Directive (EU) 2015/2193, Annex II, new plants of 1 to 5 MW", false, "fixed"),
+    P("Share of fuel N emitted as NOx", "0.10 (0.01 to 0.25)", "hydrochar_enduse", false, "sampled"),
   ],
   keep: ["NOx, SO₂ and dust reach the limits in practically every run, so the hydrochar's nitrogen and sulfur do not change these emissions (F18).",
          "Meeting the limits needs flue gas treatment, which is not yet counted. For sludge, about 89 % of the SO₂ would have to be removed. A bounding check after the sweep will show whether this changes any ranking (F19)."],
@@ -349,10 +378,10 @@ const UNITS = [
       "methane = ADM1 methane × m          m between 0.55 and 1.45\nmethane ≤ 350 mL per g COD fed"),
   ],
   params: [
-    P("By-product groups and their inhibition", "by temperature, 160 to 280 °C", "Calibrated on UASB effluent data (Tanguay-Rioux et al. 2026)"),
-    P("Methane multiplier", "1.0 (0.55 to 1.45)", "Measured BMP over model, study by study, from Mannarino 2022 to Aragón-Briceño 2020 (C3)"),
-    P("Dissolved share and VFA share", "0.75 and 0.05", "Not yet referenced in the code (A4)", true),
-    P("VFA split", "0.90 / 0.05 / 0.04 / 0.01", "Not yet referenced in the code (A4)", true),
+    P("By-product groups and their inhibition", "by temperature, 160 to 280 °C", "Calibrated on UASB effluent data (Tanguay-Rioux et al. 2026)", false, "fixed"),
+    P("Methane multiplier", "1.0 (0.55 to 1.45)", "Measured BMP over model, study by study, from Mannarino 2022 to Aragón-Briceño 2020 (C3)", false, "sampled"),
+    P("Dissolved share and VFA share", "0.75 and 0.05", "Not yet referenced in the code (A4)", true, "fixed"),
+    P("VFA split", "0.90 / 0.05 / 0.04 / 0.01", "Not yet referenced in the code (A4)", true, "fixed"),
   ],
   keep: ["One study reports complete inhibition at 240 °C (Marin-Batista 2020). No multiplier covers that case; it is a stated limitation.",
          "Ammonia stays between 0.3 and 2.5 g N/L in the pilot, below most reported inhibition thresholds (Chen, Cheng & Creamer 2008)."],
@@ -372,10 +401,10 @@ const UNITS = [
       "inorganic carbon, ions, ammonium share = measured value per kg solids × solids in the feed"),
   ],
   params: [
-    P("Digestible share fD", "food waste 0.86 · OFMSW 0.70 · sludge 0.62 · manure 0.47", "Fisgativa 2020 Table 3, Labatut 2022; OFMSW lowered for garden-waste lignin with the Chandler 1980 slope (C1c)"),
-    P("Hydrolysis rate (per day)", "0.18 · 0.18 · 0.36 · 0.15", "Fisgativa 2020; Trzcinski & Stuckey 2012; Labatut 2022"),
-    P("Inorganic carbon (g C per kg solids)", "5.8 · 5.8 · 8.9 · 6.3", "Fisgativa 2020 Table 2"),
-    P("Cations and anions", "measured", "Fisgativa 2020 Table 5"),
+    P("Digestible share fD", "food waste 0.86 · OFMSW 0.70 · sludge 0.62 · manure 0.47", "Fisgativa 2020 Table 3, Labatut 2022; OFMSW lowered for garden-waste lignin with the Chandler 1980 slope (C1c)", false, "sampled"),
+    P("Hydrolysis rate (per day)", "0.18 · 0.18 · 0.36 · 0.15", "Fisgativa 2020; Trzcinski & Stuckey 2012; Labatut 2022", false, "sampled"),
+    P("Inorganic carbon (g C per kg solids)", "5.8 · 5.8 · 8.9 · 6.3", "Fisgativa 2020 Table 2", false, "fixed"),
+    P("Cations and anions", "measured", "Fisgativa 2020 Table 5", false, "fixed"),
   ],
   keep: ["Methane depends mainly on the digestible share and the total organic matter. The fat, protein and carbohydrate split moves it by less than 1 % (C1e).",
          "With the earlier inputs, manure digesters turned acidic and some stopped producing methane. With the measured buffering, every Pathway B run of the pilot stays between pH 7.0 and 7.5 (C1d).",
@@ -395,10 +424,10 @@ const UNITS = [
       "solids N for the HTC model = cake N − cake ammonium"),
   ],
   params: [
-    P("H/C and O/C, food waste", "1.39 and 0.523", "Cao et al. 2019, Table 2 (household waste digestate)"),
-    P("H/C and O/C, sewage sludge", "1.65 and 0.458", "Aragón-Briceño et al. 2020"),
-    P("H/C and O/C, dairy manure", "1.51 and 0.638", "Belete et al. 2021, Table 1"),
-    P("Fixed-carbon ratio", "0.149 to 0.308 by class", "Cao 2019; Tsai 2025; Pawlak-Kruczek 2020"),
+    P("H/C and O/C, food waste", "1.39 and 0.523", "Cao et al. 2019, Table 2 (household waste digestate)", false, "fixed"),
+    P("H/C and O/C, sewage sludge", "1.65 and 0.458", "Aragón-Briceño et al. 2020", false, "fixed"),
+    P("H/C and O/C, dairy manure", "1.51 and 0.638", "Belete et al. 2021, Table 1", false, "fixed"),
+    P("Fixed-carbon ratio", "0.149 to 0.308 by class", "Cao 2019; Tsai 2025; Pawlak-Kruczek 2020", false, "sampled"),
   ],
   keep: ["Each class's H/C and O/C come from a single measured digestate, with no range. This is the main data gap in Pathway B.",
          "Because of this, the feed's own hydrogen and oxygen do not reach Pathway B's HTC reactor directly (C2)."],
@@ -415,9 +444,9 @@ const UNITS = [
       "credit = biomethane MJ × impact of 1 MJ natural gas boiler and furnace heat"),
   ],
   params: [
-    P("Methane recovery of the upgrading", "0.97", "Model default, stated as an assumption"),
-    P("Heating value of methane", "35.8 MJ/Nm³", "Physical constant"),
-    P("Heat from own biogas", "1 MJ per MJ methane", "Relative to the displaced boiler (F12)"),
+    P("Methane recovery of the upgrading", "0.97", "Model default, stated as an assumption", false, "fixed"),
+    P("Heating value of methane", "35.8 MJ/Nm³", "Physical constant", false, "fixed"),
+    P("Heat from own biogas", "1 MJ per MJ methane", "Relative to the displaced boiler (F12)", false, "fixed"),
   ],
   keep: ["Using the plant's own biogas or buying natural gas gives almost the same result. That follows from the energy balance, not from a missing loss (F12).",
          "The one-to-one credit is exact only if the replaced boilers deliver one megajoule of heat per megajoule of fuel. This can be checked against the ecoinvent fuel inputs (F12)."],
@@ -434,10 +463,10 @@ const UNITS = [
       "digester heat = m·cp·(35 − T in) + loss share × m·cp·(35 − T ambient) − heat recovered"),
   ],
   params: [
-    P("Preheat effectiveness", "0.55 (0.50 to 0.60)", "Two-stage flash preheating [1] and pinch target [2] in heat_integration"),
-    P("Extra HTC heat loss", "0 (0 to 0.4)", "Reference [1] reports about 0.4 for its design"),
-    P("Digester heat-loss share", "0.2 (0.1 to 0.3)", "Checked against a wall-loss calculation"),
-    P("Ambient temperature", "2.4 to 10.5 °C by province", "ECCC Canadian Climate Normals 1991–2020 (F11)"),
+    P("Preheat effectiveness", "0.55 (0.50 to 0.60)", "Two-stage flash preheating [1] and pinch target [2] in heat_integration", false, "sampled"),
+    P("Extra HTC heat loss", "0 (0 to 0.4)", "Reference [1] reports about 0.4 for its design", false, "sampled"),
+    P("Digester heat-loss share", "0.2 (0.1 to 0.3)", "Checked against a wall-loss calculation", false, "sampled"),
+    P("Ambient temperature", "2.4 to 10.5 °C by province", "ECCC Canadian Climate Normals 1991–2020 (F11)", false, "per province"),
   ],
   keep: ["In Pathway A, the hot process water covers the digester's heat in nearly every run, so that digester buys no heat (F18).",
          "The ecoinvent heat datasets have no temperature level, although HTC needs 180 to 260 °C. This is a stated limitation (D1)."],
@@ -454,9 +483,9 @@ const UNITS = [
       "hydrochar credit   → provincial industrial heat mix (NRCan 2023)\nbiomethane credit  → natural gas boilers and furnaces"),
   ],
   params: [
-    P("Industrial heat mix", "by province, electricity excluded", "NRCan Comprehensive Energy Use Database 2023, Industrial Table 1 (D5, D6)"),
-    P("Natural gas heat replaced", "four boiler and furnace datasets", "ecoinvent 3.12, Quebec technology split (D9)"),
-    P("Impact methods", "IMPACT World+ 2.2.1", "Regionalized version for ecoinvent 3.12"),
+    P("Industrial heat mix", "by province, electricity excluded", "NRCan Comprehensive Energy Use Database 2023, Industrial Table 1 (D5, D6)", false, "per province"),
+    P("Natural gas heat replaced", "four boiler and furnace datasets", "ecoinvent 3.12, Quebec technology split (D9)", false, "fixed"),
+    P("Impact methods", "IMPACT World+ 2.2.1", "Regionalized version for ecoinvent 3.12", false, "fixed"),
   ],
   keep: ["Only electricity and wood-chip cogeneration have province-specific datasets. Fuel heat is Quebec-specific in Quebec and global elsewhere (D8).",
          "The assessment is attributional: average mixes are used both for what the plant buys and for what it replaces (C5)."],
@@ -475,9 +504,9 @@ const UNITS = [
       "9,600 points × 11 provinces × 3 heat supplies = 316,800 results\none feedstock, province and heat supply → 1,800 A-against-B comparisons"),
   ],
   params: [
-    P("Samples per feedstock", "100", "Used for every condition and both pathways; the share of runs in which A wins is known to about ±5 % per condition"),
-    P("Feed chemistry of Pathway B", "measured + electron balance", "C1d, C1e"),
-    P("Run time", "about 19.6 hours on 12 cores", "Pilot run, main_v2"),
+    P("Samples per feedstock", "100", "Used for every condition and both pathways; the share of runs in which A wins is known to about ±5 % per condition", false, "—"),
+    P("Feed chemistry of Pathway B", "measured + electron balance", "C1d, C1e", false, "fixed"),
+    P("Run time", "about 19.6 hours on 12 cores", "Pilot run, main_v2", false, "—"),
   ],
   keep: ["A first screening with 6,720 points decided which inputs to put on a grid, which to sample and which to fix (F9, F13)."],
   code: [["ADM1/sweep_engine.py", "sweep_engine.py"], ["notebooks/main_sweep.ipynb", "main_sweep.ipynb"]], tests: ["tests/test_sweep_engine.py"], log: "F4, F9, F13, F17" },
@@ -499,8 +528,84 @@ const QUESTIONS = [
   ["Can the emission limits be treated as free?", "Meeting them for sludge needs removing about 89 % of the SO₂. I would add a generous treatment burden after the sweep and check whether any ranking changes, and model treatment in detail only where it does."],
 ];
 
+
+const pill = st => {
+  const k = st.startsWith("sampled") ? "sampled" : st.startsWith("grid") || st.startsWith("per province") ? "grid" : st.startsWith("fixed") ? "fixed" : st.startsWith("from") ? "computed" : "none";
+  return `<span class="pill ${k}">${st}</span>`;
+};
+const GRID = [
+  ["Feedstock class", "food waste · OFMSW · raw mixed sewage sludge · dairy manure", "both", "F1, F15"],
+  ["HTC temperature", "180 · 220 · 240 °C", "both", "F13"],
+  ["HTC residence time", "60 · 240 min", "both", "F13"],
+  ["Digester residence time", "Pathway B: 20 · 30 · 40 d   (Pathway A: fixed at 30 d)", "B", "F13"],
+  ["Province", "QC · ON · MB · SK · AB · BC · NB · NS · PE · NL · YT", "both", "D3, F11"],
+  ["Heat supply", "Paper 1 (electric HTC) · all natural gas · own biogas", "both", "D1"],
+];
+const CLASS_ROWS = [
+  ["sub", "Composition (% dry, central value in brackets); drawn together, oxygen by difference (F15, F16)"],
+  ["Carbon", ["37–54 (47)", "42–52 (47)", "28–45 (35)", "33–45 (40)"], "both"],
+  ["Hydrogen", ["4.5–8.0 (6.6)", "5.5–7.0 (6.3)", "4.0–7.0 (5.3)", "4.5–6.0 (5.3)"], "both"],
+  ["Nitrogen", ["1.7–6.0 (2.8)", "2.0–3.8 (2.8)", "3.0–7.5 (4.8)", "1.4–3.0 (2.3)"], "both"],
+  ["Sulfur", ["0.05–0.6 (0.25)", "0.1–0.4 (0.25)", "0.5–1.7 (1.0)", "0.2–0.6 (0.4)"], "both"],
+  ["Ash", ["2–15 (8)", "5–25 (12)", "18–42 (30)", "9–25 (16)"], "both"],
+  ["Volatile matter", ["68–85 (79)", "65–82 (75)", "50–75 (62)", "60–77 (69)"], "both"],
+  ["Fixed carbon", ["5–21 (13)", "8–24 (13)", "3–13 (8)", "11–18 (15)"], "both"],
+  ["sub", "Moisture (% wet basis)"],
+  ["Feed moisture", ["70–90", "65–80", "70–85", "82–90"], "both"],
+  ["sub", "Digestion of the raw waste (Pathway B)"],
+  ["Digestible share fD", ["0.80–0.90", "0.60–0.80", "0.58–0.67", "0.40–0.55"], "B"],
+  ["Hydrolysis rate (per day)", ["0.18–0.25", "0.18–0.25", "0.27–0.44", "0.08–0.21"], "B"],
+  ["Dissolved share of the digestible matter", ["*0.44", "*0.44", "0.03–0.40", "*0.03"], "B"],
+  ["Digestate fixed-carbon ratio FC/(VM+FC)", ["0.149–0.206", "0.149–0.206", "0.149–0.206", "0.181–0.308"], "B"],
+];
+const COMMON = [
+  ["Process-water methane multiplier", "0.55–1.45", "A", "Measured over modelled methane, study by study (C3)"],
+  ["Preheat effectiveness of the HTC", "0.50–0.60", "both", "Two-stage flash preheating; pinch target (heat_integration [1], [2])"],
+  ["Extra HTC heat loss", "0–0.40", "both", "Reference [1] reports about 0.4"],
+  ["Hydrochar moisture after the press", "0.30–0.50", "both", "heat_integration"],
+  ["Dryer heat", "1.8–4.32 MJ/kg water", "both", "Belt dryer [10]"],
+  ["Press electricity", "20–30 kWh/t solids", "both", "heat_integration"],
+  ["Share of fuel N emitted as NOx", "0.01–0.25", "both", "hydrochar_enduse (no effect under the emission limits, F18)"],
+  ["Separation temperature", "60–80 °C", "both", "Model assumption"],
+  ["Digestate temperature loss in dewatering", "0–10 K", "B", "Model assumption"],
+  ["Digester heat-loss share", "0.10–0.30", "both", "Checked against a wall-loss calculation"],
+];
+const COMPUTED = [
+  ["Protein, fat and carbohydrate split of the raw waste", "Electron balance on the sampled C, H, O, N (Kleerebezem & van Loosdrecht 2006)", "B", "C1e"],
+  ["Ammonium in the digester feed", "Measured ammonium share of N (Fisgativa 2020) × sampled N", "B", "C1d"],
+  ["Process-water composition", "Feed elements minus hydrochar and gas elements (by difference)", "A", "F18"],
+  ["Hydrochar yield and composition", "HTC model from the sampled feed (A) or digestate (B), T and RT", "both", "C0"],
+  ["Digestate carbon", "Feed C minus C in biogas and in bicarbonate", "B", "C2, C2a"],
+  ["Ambient temperature", "Province climate normal, 2.4–10.5 °C", "both", "F11"],
+];
+const FIXED = [
+  ["HTC slurry moisture", "0.85", "both", "Design choice; varying it dominated the comparison (F9, F13)"],
+  ["Pathway A digester feed", "25 kg COD/m³", "A", "Design choice (F13)"],
+  ["Pathway B digester feed", "10 % TS", "B", "Design choice (F13)"],
+  ["Pathway A digester residence time", "30 d", "A", "Dissolved feed, time not limiting (C1b, F13)"],
+  ["Dried hydrochar moisture", "10 %", "both", "Storage specification"],
+  ["Digester temperature", "35 °C", "both", "Mesophilic, ADM1 operating temperature"],
+  ["Electric HTC heater efficiency", "0.90", "both", "Model default"],
+  ["Upgrading methane recovery", "0.97", "both", "Model default (assumption)"],
+  ["Heat from own biogas", "1 MJ per MJ methane", "both", "Same boiler as the credit (F12)"],
+  ["Emission limits NOx, SO₂, dust", "500, 400, 50 mg/Nm³", "both", "Directive (EU) 2015/2193"],
+  ["Process water: non-digestible share", "0.25 + 0.10 (T − 180)/60", "A", "Calibrated temperature rule (C3); varies with the T grid"],
+  ["Process water: dissolved and VFA shares", "0.75 and 0.05; VFA split 0.90 / 0.05 / 0.04 / 0.01", "A", "No source yet (A4)"],
+  ["Pathway B feed buffering", "inorganic carbon, cations, anions per kg solids", "B", "One measured substrate per class (Fisgativa 2020, C1d)"],
+  ["Digestate H/C and O/C", "food waste 1.39, 0.523 · sludge 1.65, 0.458 · manure 1.51, 0.638", "B", "One measured digestate per class (C2)"],
+  ["HTC model error", "not included", "both", "Pending supervisor decision (F2)"],
+];
+const actOn = a => a === "A" ? '<span class="pill sampled">A</span>' : a === "B" ? '<span class="pill grid">B</span>' : '<span class="pill fixed">A and B</span>';
+document.getElementById("t-grid").innerHTML = GRID.map(([n, v, a, l]) => `<tr><td>${n}</td><td>${v}</td><td>${actOn(a)}</td><td>${l}</td></tr>`).join("");
+document.getElementById("t-class").innerHTML = CLASS_ROWS.map(r => r[0] === "sub"
+  ? `<tr class="sub"><td colspan="6">${r[1]}</td></tr>`
+  : `<tr><td>${r[0]}</td>${r[1].map(v => v.startsWith("*") ? `<td class="cls fx">fixed ${v.slice(1)}</td>` : `<td class="cls">${v}</td>`).join("")}<td>${actOn(r[2])}</td></tr>`).join("");
+document.getElementById("t-common").innerHTML = COMMON.map(([n, v, a, src]) => `<tr><td>${n}</td><td class="v">${v}</td><td>${actOn(a)}</td><td class="src">${src}</td></tr>`).join("");
+document.getElementById("t-computed").innerHTML = COMPUTED.map(([n, v, a, l]) => `<tr><td>${n}</td><td>${v}</td><td>${actOn(a)}</td><td>${l}</td></tr>`).join("");
+document.getElementById("t-fixed").innerHTML = FIXED.map(([n, v, a, why]) => `<tr><td>${n}</td><td class="v" style="white-space:normal">${v}</td><td>${actOn(a)}</td><td class="src">${why}</td></tr>`).join("");
+
 const color = l => l === "a" ? "var(--a)" : l === "b" ? "var(--b)" : "var(--s)";
-document.getElementById("jump").innerHTML = UNITS.map(u =>
+document.getElementById("jump").innerHTML = `<a href="#vary" data-card="vary"><span class="dot" style="background:var(--fg)"></span>What the sweep varies</a>` + UNITS.map(u =>
   `<a href="#${u.id}" data-card="${u.id}"><span class="dot" style="background:${color(u.lane)}"></span>${u.title}</a>`).join("");
 
 document.getElementById("units").innerHTML = UNITS.map(u => `
@@ -515,8 +620,8 @@ document.getElementById("units").innerHTML = UNITS.map(u => `
     ${u.steps.map(s => `<div class="step"><p>${s.text}</p><div class="formula">${s.formula.replace(/</g, "&lt;")}</div></div>`).join("")}
   </div>
   <div class="steps"><h4>Values used</h4>
-    <div class="tbl"><table><thead><tr><th>What</th><th>Value</th><th>Where it comes from</th></tr></thead><tbody>
-      ${u.params.map(p => `<tr><td>${p.name}</td><td class="v">${p.value}</td><td class="src">${p.none ? '<span class="none">no source</span>' : ""}${p.source}</td></tr>`).join("")}
+    <div class="tbl"><table><thead><tr><th>What</th><th>Value</th><th>In the sweep</th><th>Where it comes from</th></tr></thead><tbody>
+      ${u.params.map(p => `<tr><td>${p.name}</td><td class="v">${p.value}</td><td>${pill(p.sweep)}</td><td class="src">${p.none ? '<span class="none">no source</span>' : ""}${p.source}</td></tr>`).join("")}
     </tbody></table></div>
   </div>
   <div class="steps"><h4>What to keep in mind</h4>
