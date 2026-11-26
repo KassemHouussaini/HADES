@@ -233,8 +233,10 @@ class SystemContext:
     # Pathway B: overrides of the feedstock degradability (ADM1.PATHWAY_B_FEED_PARAMS),
     # e.g. {"fD": 0.80, "f_sol": 0.30, "k_hyd": 0.20}; None = tabulated values
     b_feed_overrides: Optional[dict] = None
-    # Pathway B feed chemistry: None/"legacy" (Paper 1 inputs) or "fisgativa"
-    # (measured inorganic carbon, ammonium, ions and lipid share; ADM1, C1d)
+    # Pathway B feed chemistry: None/"legacy" (Paper 1 inputs), "fisgativa"
+    # (measured inorganic carbon, ammonium, ions and lipid share; C1d) or
+    # "fisgativa_kvl" (same, lipid/protein/carbohydrate split from the sampled
+    # composition, Kleerebezem & van Loosdrecht 2006; C1e). See ADM1.py.
     b_feed_chemistry: Optional[str] = None
     # heat displaced by biomethane: None -> ctx.ng_heat_market (Paper 1); or
     # [(activity, weight)] (e.g. lca_contexts.ng_heat_datasets resolved), weights normalized
@@ -2153,7 +2155,7 @@ def _build_system(ctx: SystemContext,
             waste_treatment["dg" + _k] = digestate_params.get(_k)
         waste_treatment["dg_NH4_source"] = _NH4_source_B
         waste_treatment["N_to_centrate_kg"] = float(N_to_centrate_kg_B)
-        for _k in ("_fD", "_f_sol", "_k_hyd"):
+        for _k in ("_fD", "_f_sol", "_k_hyd", "_lipid_share"):
             waste_treatment["adm1" + _k] = feed_inputs.get(_k)
     # caps that bound in this run (ADM1.bound / record_cap)
     if PATHWAY == "B" and "C_dig" in str(digestate_params.get("_dg_warnings", "")):

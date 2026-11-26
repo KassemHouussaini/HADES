@@ -332,7 +332,11 @@ def pathway_b_feed_params(feedstock_name, overrides=None):
 # "Sludge I" (primary) and "Sludge II" (secondary) per kg TS. Continuous mode
 # only (sweeps, plant LCA); batch mode keeps the legacy inputs.
 B_FEED_CHEMISTRY_DEFAULT = "legacy"
-B_FEED_CHEMISTRY_OPTIONS = ("legacy", "fisgativa")
+# "fisgativa": lipid share = measured per class (Fisgativa Table 2, NMR).
+# "fisgativa_kvl": same inorganic inputs, but protein / lipid / carbohydrate
+#     split from each sampled composition (Kleerebezem & van Loosdrecht 2006,
+#     kvl_cod_split, decision log C1e).
+B_FEED_CHEMISTRY_OPTIONS = ("legacy", "fisgativa", "fisgativa_kvl")
 _FIS_T2 = {   # Table 2: TS gTS/kgWW, TIC gC/kgWW, TKN, NH4+ gN/kgWW, pH, lipids %COD;
               # Table 5: S_cat, S_an kmol/m3 of substrate
     "biowaste":  dict(TS=190.2, TIC=1.1, TKN=6.4, NH4=0.1, pH=5.28, lip=0.402, cat=0.04, an=0.02),
@@ -372,6 +376,56 @@ def fisgativa_cation(S_IC, S_IN, pH, S_an=FIS_S_AN, S_va=0.0, S_bu=0.0, S_pro=0.
     cat = (s_hco3 + ion(4.76, S_ac) / 64.0 + ion(4.88, S_pro) / 112.0 + ion(4.82, S_bu) / 160.0
            + ion(4.86, S_va) / 208.0 + kw / h + S_an - S_IN + s_nh3 - h)
     return bound("S_cat (feedstock, Fisgativa) >= 0", cat, lo=0.0)
+
+
+# Biochemical split of the feed organic matter from its elemental composition:
+# Kleerebezem, R. and van Loosdrecht, M.C.M. (2006). Waste characterization
+# for implementation in ADM1. Water Sci. Technol. 54(4):167-174,
+# doi:10.2166/wst.2006.538 (decision log C1e).
+#   Per C-mol of organic matter CH_y O_z N_v (N at the oxidation state of NH3),
+#   the degree of reduction is gamma_SUB = 4 + y - 2z - 3v - u (their eq. 7;
+#   u = charge from neutralized VFA, taken as 0 for solid feeds). Protein,
+#   carbohydrate and VFA have gamma = 4, the model lipid (glycerol tripalmitate,
+#   C51H98O6, C1H2.85O0.575 per C-mol; their Table 1 and footnote 1) has
+#   gamma_LIP = 5.68, so a substrate more reduced than 4 contains lipids:
+#       eta_LIP = (y - 2z - 3v - u) / (gamma_LIP - 4)          (their eq. 9)
+#       eta_PR  = v / N_PR,  N_PR = 0.26 N-mol per C-mol      (Table 1, Fig. 2)
+#       eta_CHO = 1 - eta_LIP - eta_PR - eta_VFA                (Fig. 2)
+#   (C-mol fractions). COD shares follow from COD_i ~ eta_i x gamma_i / 4
+#   (their eq. 10), normalized to the total.
+# Used here with the measured elemental analysis (C, H, O, N of the sampled
+# composition) instead of their COD/TOC route: checked by hand at the F15
+# central compositions, the elemental route gives lipid COD shares of 0.30
+# (food waste), 0.066 (dairy manure), 0.33 (sewage sludge), against 0.40,
+# 0.047 and 0.14-0.26 measured by Fisgativa et al. 2020; the COD/TOC route on
+# Fisgativa's own Table 2 gives 0.48 for manure and 0.72 for secondary sludge.
+# The authors warn that the split is very sensitive to the measured oxidation
+# state (their Fig. 4); hence the bounds (recorded as caps).
+# Assumption: the degradable part (fD) has the same biochemical split as the
+# whole organic matter (fD and the split come from different sources). S is
+# ignored, as in the source.
+KVL_GAMMA_LIP = 5.68     # e-mol per C-mol, model lipid (Table 1)
+KVL_GAMMA_OTHER = 4.0    # protein, carbohydrate, VFA (Table 1)
+KVL_N_PR = 0.26          # N-mol per C-mol of protein (Table 1, Batstone et al. 2002 amino acids)
+
+
+def kvl_cod_split(C, H, O, N):
+    """COD shares (protein, lipid, carbohydrate) of the organic matter from
+    its elemental masses (any unit, same for all; N = organic N), after
+    Kleerebezem & van Loosdrecht 2006 eqs. 7, 9 and 10 with u = 0.
+    Bounds: eta_LIP in [0, 1 - eta_PR], eta_PR in [0, 1] (caps recorded)."""
+    nC = C / MW_C
+    if nC <= 0:
+        raise ValueError("[KvL split] organic carbon must be > 0")
+    y, z, v = (H / MW_H) / nC, (O / MW_O) / nC, (N / MW_N) / nC
+    eta_pr = bound("KvL protein C-mol fraction <= 1", v / KVL_N_PR, 0.0, 1.0)
+    eta_lip = bound("KvL lipid C-mol fraction in [0, 1 - protein]",
+                    (y - 2.0 * z - 3.0 * v) / (KVL_GAMMA_LIP - KVL_GAMMA_OTHER), 0.0, 1.0 - eta_pr)
+    eta_cho = max(0.0, 1.0 - eta_lip - eta_pr)
+    cod = {"protein": eta_pr * KVL_GAMMA_OTHER, "lipid": eta_lip * KVL_GAMMA_LIP,
+           "carbohydrate": eta_cho * KVL_GAMMA_OTHER}
+    tot = sum(cod.values())
+    return {k: v_ / tot for k, v_ in cod.items()}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -458,16 +512,27 @@ def derive_adm1_fractions(C, H, O, N, S, ash_kg=0.0,
             "X_I":   X_I_frac,
         }
     else:
-        protein_frac = bound("protein fraction (feedstock) <= 0.55", (N / m_org) / 0.16, 0.0, 0.55)
-        OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
-        if use_feed and feed_params.get("lipid_cod") is not None:
-            lipid_raw = float(feed_params["lipid_cod"])          # measured (Fisgativa, C1d)
+        if use_feed and feed_params.get("split") == "kvl":
+            # protein, lipid and carbohydrate COD shares from the electron
+            # balance of the elemental composition (Kleerebezem & van
+            # Loosdrecht 2006; kvl_cod_split). N here is the organic N.
+            _kvl = kvl_cod_split(C, H, O, N)
+            protein_frac, lipid_frac, carb_frac = _kvl["protein"], _kvl["lipid"], _kvl["carbohydrate"]
         else:
-            lipid_raw = bound("lipid fraction (feedstock) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
-        lipid_frac = bound("lipid fraction (feedstock) <= 0.80 - protein", lipid_raw,
-                           hi=max(0.0, 0.80 - protein_frac))
-        carb_frac = bound("carbohydrate fraction (feedstock) >= 0.05",
-                          1.0 - protein_frac - lipid_frac, lo=0.05)
+            # legacy protein: N / organic mass / 0.16 (protein 16 % N, i.e.
+            # the 6.25 factor), used as a COD share (Paper 1)
+            protein_frac = bound("protein fraction (feedstock) <= 0.55", (N / m_org) / 0.16, 0.0, 0.55)
+            OC_mol = (O / MW_O) / max(C / MW_C, 1e-9)
+            if use_feed and feed_params.get("lipid_cod") is not None:
+                # measured lipid share of COD, NMR (Fisgativa et al. 2020 Table 2; C1d)
+                lipid_raw = float(feed_params["lipid_cod"])
+            else:
+                # legacy heuristic (Paper 1): (1 - O/C)/0.9, capped at 0.40
+                lipid_raw = bound("lipid fraction (feedstock) <= 0.40", (1.0 - OC_mol) / (1.0 - 0.1), 0.0, 0.40)
+            lipid_frac = bound("lipid fraction (feedstock) <= 0.80 - protein", lipid_raw,
+                               hi=max(0.0, 0.80 - protein_frac))
+            carb_frac = bound("carbohydrate fraction (feedstock) >= 0.05",
+                              1.0 - protein_frac - lipid_frac, lo=0.05)
 
         bio_total = protein_frac + lipid_frac + carb_frac
         protein_frac /= bio_total; lipid_frac /= bio_total; carb_frac /= bio_total
@@ -1307,12 +1372,15 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     feed_params = (pathway_b_feed_params(feedstock_name, feed_overrides)
                    if feedstock_name is not None else None)
     fis = None
-    if chemistry == "fisgativa" and mode == "continuous":
+    if chemistry in ("fisgativa", "fisgativa_kvl") and mode == "continuous":
         if feedstock_name not in FISGATIVA_FEED_CHEM:
             raise ValueError(f"[ADM1 feed] no Fisgativa feed chemistry for {feedstock_name!r}; "
                              f"known: {sorted(FISGATIVA_FEED_CHEM)}")
         fis = FISGATIVA_FEED_CHEM[feedstock_name]
-        feed_params = dict(feed_params, lipid_cod=fis["lipid_cod"])
+        if chemistry == "fisgativa":
+            feed_params = dict(feed_params, lipid_cod=fis["lipid_cod"])   # measured lipids
+        else:
+            feed_params = dict(feed_params, split="kvl")                  # KvL 2006 split
     N_total = N_feed                          # all N: dry mass, COD, ammonium
     N_org = N_total if fis is None else N_total * (1.0 - fis["nh4_share_TKN"])   # protein
     m_org     = C_feed + H_feed + O_feed + N_feed + S_feed
@@ -1386,7 +1454,11 @@ def translate_feedstock_to_adm1(C_feed, H_feed, O_feed, N_feed, S_feed,
     d["_m_org_kg"]          = m_org
     d["_pw_mode"]           = False   # Pathway B: standard ADM1
     d["_feedstock_name"]    = feedstock_name
-    d["_feed_chemistry"]    = "fisgativa" if fis is not None else "legacy"
+    d["_feed_chemistry"]    = chemistry if fis is not None else "legacy"
+    # COD share of lipids in the degradable organic matter (for the sweep output)
+    _deg = sum(fractions.get(k, 0.0) for k in ("S_su", "S_aa", "S_fa", "X_ch", "X_pr", "X_li"))
+    d["_lipid_share"] = ((fractions.get("S_fa", 0.0) + fractions.get("X_li", 0.0)) / _deg
+                         if _deg > 0 else None)
     if feed_params is not None:
         d["_k_hyd"]  = feed_params["k_hyd"]    # read by run_adm1
         d["_fD"]     = feed_params["fD"]

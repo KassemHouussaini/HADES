@@ -364,7 +364,7 @@ META_KEYS = ["CH4_mass_AD", "biomethane_m3", "MJ_hydrochar", "HC_dry_yield", "PW
              "E_HTC_elec_kWh", "E_dryer_heat_kWh", "Q_heat_AD_MJ", "CH4_own_use_MJ", "own_biogas_heat_eff", "b_feed_chemistry",
              "heat_demand_htc_MJ", "heat_demand_dryer_MJ", "heat_demand_ad_MJ",
              "heat_shortfall_htc_MJ", "heat_shortfall_dryer_MJ", "heat_shortfall_ad_MJ",
-             "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd",
+             "pw_ch4_multiplier_effective", "adm1_fD", "adm1_f_sol", "adm1_k_hyd", "adm1_lipid_share",
              "n_caps_correlation", "n_caps_design", "caps_active", "qa_flags", "_pH",
              "_TAN_gN_L", "_NH3_free_gN_L",
              # hydrochar boiler: emitted and removed (uncontrolled minus emitted) per FU, kg (F19)

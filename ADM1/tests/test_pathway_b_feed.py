@@ -87,3 +87,41 @@ def test_legacy_is_default_and_unchanged(adm1):
     assert a["S_IN"] == b["S_IN"] and a["S_cation"] == b["S_cation"]
     with pytest.raises(ValueError):
         adm1.translate_feedstock_to_adm1(**MANURE_KW, chemistry="other")
+
+
+def _masses(nC, nH, nO, nN, adm1):
+    """Elemental masses of a formula CnC HnH OnO NnN (same unit for all)."""
+    return dict(C=nC * adm1.MW_C, H=nH * adm1.MW_H, O=nO * adm1.MW_O, N=nN * adm1.MW_N)
+
+
+def test_kvl_pure_compounds(adm1):
+    """Kleerebezem & van Loosdrecht 2006, Table 1: carbohydrate C1H2O1,
+    protein C1H2.52O0.87N0.26 and lipid C51H98O6 must each come out as 100 %."""
+    cho = adm1.kvl_cod_split(**_masses(6, 10, 5, 0, adm1))           # glucose polymer unit C6H10O5
+    assert cho["carbohydrate"] == pytest.approx(1.0) and cho["lipid"] == pytest.approx(0.0, abs=1e-12)
+    lip = adm1.kvl_cod_split(**_masses(51, 98, 6, 0, adm1))          # glycerol tripalmitate
+    assert lip["lipid"] == pytest.approx(1.0, abs=1e-3)
+    pr = adm1.kvl_cod_split(**_masses(1, 2.52, 0.87, 0.26, adm1))    # Batstone et al. 2002 protein
+    assert pr["protein"] == pytest.approx(1.0) and pr["lipid"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_kvl_mixture_and_bounds(adm1):
+    # 1 C-mol carbohydrate + 1 C-mol lipid: eta_LIP = 0.5 -> COD shares 4/(4+5.68), 5.68/(4+5.68)
+    m = adm1.kvl_cod_split(**_masses(2, 2 + 98 / 51, 1 + 6 / 51, 0, adm1))
+    # rel 5e-3: the paper rounds gamma_LIP to 5.68 (tripalmitin is 4 + 86/51 = 5.686)
+    assert m["lipid"] == pytest.approx(5.68 / 9.68, rel=5e-3)
+    # more oxidized than carbohydrate (oxalic-acid-like) -> lipid bounded at 0, cap recorded
+    adm1.reset_caps()
+    ox = adm1.kvl_cod_split(**_masses(2, 2, 4, 0, adm1))
+    assert ox["lipid"] == 0.0 and abs(sum(ox.values()) - 1.0) < 1e-12
+    assert any("KvL lipid" in c for c in adm1.caps_report())
+
+
+def test_fisgativa_kvl_option(adm1):
+    d = adm1.translate_feedstock_to_adm1(**MANURE_KW, chemistry="fisgativa_kvl")
+    f = adm1.translate_feedstock_to_adm1(**MANURE_KW, chemistry="fisgativa")
+    assert d["_feed_chemistry"] == "fisgativa_kvl"
+    assert d["S_IC"] == f["S_IC"] and d["S_cation"] == f["S_cation"] and d["S_IN"] == f["S_IN"]
+    org_N = 2.3 * (1 - 0.8 / 5.2)
+    exp = adm1.kvl_cod_split(40.0, 5.3, 36.0, org_N)["lipid"]
+    assert d["_lipid_share"] == pytest.approx(exp, rel=1e-9)
