@@ -403,12 +403,22 @@ biomethane credit: natural gas boilers and furnaces (CA-QC technology split)`,
   role: "Runs the full design in parallel without Brightway writes: one ADM1 run per point, scored for every province and heat supply from precomputed unit scores.",
   inputs: "Grid, sampled factors, fixed design.",
   outputs: "One result file per point (resumable); pairs of A and B on the same sample.",
-  eq: `grid: 4 feedstocks × 3 T × 2 RT × (1 HRT for A + 3 for B) = 96 cells
-Latin hypercube, 100 samples per cell, 15 sampled factors  → 9,600 points
-each point scored for 11 provinces × 3 heat supplies       → 316,800 results
-share of samples where A < B per feedstock × province × heat supply`,
+  eq: `point = one simulation of one pathway (HTC + digestion) for one sample at one condition
+
+4 feedstocks × 100 samples                      = 400 samples
+  (composition, moisture and 15 uncertain parameters drawn together, Latin hypercube)
+× 6 HTC conditions (3 T × 2 RT)                 = 2,400
+× 4 runs: A at HRT 30 d + B at HRT 20 / 30 / 40 d
+                                                = 9,600 points (2,400 A, 7,200 B)
+
+each point scored for 11 provinces × 3 heat supplies (no new simulation)
+                                                = 316,800 impact results
+A–B pairs: each B point with the A point of the same sample, feedstock, T and RT
+                                                = 7,200 pairs × 33 = 237,600 comparisons
+one decision-map cell (feedstock × province × heat supply)
+                                                = 100 × 6 × 3 = 1,800 comparisons`,
   params: [
-    P("Samples per cell", "100", "P(A beats B) known to about ±5 %"),
+    P("Samples per feedstock", "100", "Reused for every condition and both pathways; P(A beats B) per condition known to about ±5 %"),
     P("Seed", "20261125", "main_v2"),
     P("Feed chemistry", "fisgativa_kvl", "C1d, C1e"),
   ],
