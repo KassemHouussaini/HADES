@@ -127,6 +127,12 @@ The small HRT sensitivity in Paper 1 is a model artifact. At 30 d, a steady-stat
 **Code.** 7c21c38. Notebook setting `PW_CH4_MULTIPLIER` (12b32e0).
 **Paper 1.** Unchanged at m = 1.
 
+### C3a. Process-water feed to PW-ADM1: two known issues, fix deferred (2026-11-26)
+**Issue 1, inorganic carbon at its ceiling.** `translate_pw_to_adm1` sets S_IC = COD concentration × 0.8/61 (no source), bounded 0.08–0.20 kmol C/m³. At the main-sweep dilution target of 25 kg COD/m³ this gives 0.33, so S_IC is held at the 0.20 ceiling in every Pathway A run (the pilot cap "S_IC (htc_pw) in [0.08, 0.20]"). An earlier statement in this conversation that it sat at the floor was wrong.
+**Issue 2, ammonium N counted twice.** S_IN = N_pw × f_IN with f_IN = 0.30–0.65 from the severity factor (R0 = RT·exp((T − 100)/14.75), Overend & Chornet 1987; logistic coefficients not referenced), but `derive_adm1_fractions` computes the protein share from all N_pw, ammonium included: protein (N/m_org)/0.16 is overstated by 1/(1 − f_IN) = 1.4 to 2.9. Likely cause of the protein cap (0.55) binding for sludge in the pilot.
+**Also without source in the same step:** dissolved share 0.75, VFA share 0.05, VFA split 0.90/0.05/0.04/0.01, fat share (1 − O/C)/0.9 with cap 0.40 (A4).
+**Decision (user, 2026-11-26).** Documented in the model map; not changed in `main_v2` (sweep consistency). To revise with the next rerun, as Pathway B was (C1d, C1e): protein, fat and carbohydrate from the electron balance on organic N only, and measured process-water data for dissolved share, acids and alkalinity where available. Listed among the decisions for the supervisors.
+
 ### C4. Gas yield: unchanged (2026-11-21)
 **Decision.** Kept as is; small effect on the LCA.
 
