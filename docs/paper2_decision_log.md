@@ -392,6 +392,22 @@ The no-moisture entries in the code are thereby filled; sludge and manure now ru
 **Still open (for the paper, not blocking).** Sulfur retention in ash (Ca- and P-rich sludge ash), lower fuel-N conversion for high-N fuels, N2O from urea SNCR, CO2 from bicarbonate versus the CO2 taken up in its production.
 **Code.** `hydrochar_enduse.compute_enduse_quantities` (`*_removed_kg`), `system_builder` (`enduse_*_removed_kg` on the result), `sweep_engine.META_KEYS`. Test `test_removed_mass_is_uncontrolled_minus_emitted`. 136 tests pass; frozen Paper 1 values unchanged.
 
+### F20. Supervisor meeting of 2026-11-27: decisions
+**Own-biogas heat scenario: kept, marked least realistic.** Supervisor: upgraded biomethane is a biogenic product that sells for about 5 to 7 times the price of natural gas, so operators buy natural gas for process heat and sell the biomethane; plant energy use is about 20 to 30 % of production. Kept in the sweep because it costs no simulation time (scoring only), reported as the least realistic scenario (user's decision). Code note in `sweep_engine.HEAT_CONFIGS`.
+**Pathway A digester HRT: 15 d** (was 30 d): process water is already dissolved, so hydrolysis does not limit it (C1b). `MAIN_SWEEP_HRT_LEVELS = {"A": [15], "B": [20, 30, 40]}`.
+**Process-water methane multiplier: symmetric as a ratio** (C3b).
+**Process-water COD target: grid to be set** (supervisor: test e.g. 25 and 50 kg COD/m³, never above the undiluted process water; a digester crash at the higher value would itself be a result). Undiluted process-water COD at the central compositions (mock background, 60 min): food waste 43–65, OFMSW 19–58, sewage sludge 75–86, dairy manure 26–42 kg COD/m³ (low end at 180 °C and wet feed, high end at 240 °C).
+**Process-water fractionation kept as is** (dissolved 0.75, VFA 0.05, particulate 0.25, S_I groups by temperature). Supervisor: precision is not critical (VFA share varies ±5–10 % in any case); the inhibitor groups depend on the substrate (lipid-rich feeds give more easily degraded compounds, N-rich sludge more pyrazines) as well as on temperature, but no data exist to model this, and case-by-case expert judgement would add complexity without bringing the model closer to reality. Stated as a limitation, as in Paper 1; making PW-ADM1 robust across substrates is a separate project.
+**Flue gas treatment: link the removed mass to ecoinvent flue gas cleaning data** (supervisor: valid for combustion gases in general), instead of a technology model or the bounding check of F19. `ADM1/find_flue_gas_datasets.py` lists the candidate ecoinvent activities and checks whether the combustion templates already contain flue gas cleaning (to avoid double counting); to run on the user's ecoinvent project.
+**Fuel N to NOx and fuel S to SOx: to revise** (user's literature research). Supervisor: with complete combustion most fuel N leaves as N2; 0.01–0.25 of fuel N as NOx overstates NOx strongly.
+**Sewage sludge class: kept as is** (raw mixed sludge), user's decision.
+**Confirmed:** uniform sampling with the same values for A and B; HTC slurry moisture fixed at 0.85 (supervisor expects it to matter for economics and sees the moisture/loading trade-off as a possible optimization contribution later); Pathway B degradability parameters; results as the share of runs in which A beats B per province and heat supply.
+**Run.** `main_v2` (paused at about 4,000 of 9,600 points) is not resumed: these changes alter the inventory. The next sweep, `main_v3`, also carries C2a and the C3a nitrogen fix if retained.
+
+### C3b. Process-water methane multiplier symmetric as a ratio (2026-11-27)
+**Decision (supervisor, user).** The range (0.55, 1.45) was asymmetric as a ratio: 0.55 is a division by 1.82, a larger change than a multiplication by 1.45, which skewed Pathway A methane downward. New range [1/f, f] with f = 1.72, from the lowest study ratio 0.58 (Mannarino 2022) to its inverse; it covers the highest study ratio 1.44 (Aragón-Briceño 2020). Sampled uniformly in ln(m), so ×f and ÷f are equally likely and the geometric centre is 1.0. The 350 mL CH4/g COD cap is unchanged.
+**Code.** `system_builder.PW_CH4_MULTIPLIER_RANGE = (0.5814, 1.72)`, `PW_CH4_MULTIPLIER_SCALE = "log"`; `sweep_engine.map_sample` samples a factor with `scale="log"` in ln space. Test in `test_sweep_engine.py::test_map_sample_ranges`. 142 tests pass.
+
 ---
 
 ## E. Open items

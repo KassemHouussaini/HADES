@@ -63,6 +63,18 @@ def test_map_sample_ranges(se, sb):
             assert prm["hi_overrides"][k] == pytest.approx(getattr(sb.hi, r)[end])
     prm, _ = se.map_sample(np.ones(len(space)), space, "dairy_manure", core)
     assert prm["b_feed_overrides"]["f_sol"] == core.PATHWAY_B_FEED_PARAMS["dairy_manure"]["f_sol"]  # no range
+    # methane multiplier on a log scale (C3b): symmetric as a ratio, geometric centre 1.0
+    lo, hi = sb.PW_CH4_MULTIPLIER_RANGE
+    assert lo * hi == pytest.approx(1.0, rel=1e-3) and sb.PW_CH4_MULTIPLIER_SCALE == "log"
+    i = names.index("pw_ch4_multiplier")
+    u = np.full(len(space), 0.5)
+    prm, _ = se.map_sample(u, space, "food_waste", core)
+    assert prm["pw_ch4_multiplier"] == pytest.approx(1.0, rel=1e-3)
+    u[i] = 0.25
+    m25 = se.map_sample(u, space, "food_waste", core)[0]["pw_ch4_multiplier"]
+    u[i] = 0.75
+    m75 = se.map_sample(u, space, "food_waste", core)[0]["pw_ch4_multiplier"]
+    assert m25 * m75 == pytest.approx(1.0, rel=1e-3)          # x f and / f equally likely
 
 
 def test_adm1_memo_replays_caps(se):

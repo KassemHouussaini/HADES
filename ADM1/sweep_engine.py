@@ -61,7 +61,11 @@ FG_ROLES = {
 }
 NG_BOILER = "heat production, natural gas, at boiler condensing modulating >100kW"
 
-# heat configurations: consumer -> "electricity" | "ng" | "own_biogas"; None = Paper 1
+# heat configurations: consumer -> "electricity" | "ng" | "own_biogas"; None = Paper 1.
+# "own_biogas" is kept because it costs no simulation time (scoring only), but it
+# is the least realistic scenario: upgraded biomethane sells for several times
+# the price of natural gas, so operators buy natural gas for process heat and
+# sell the biomethane (supervisor meeting 2026-11-27, decision log F20).
 HEAT_CONFIGS = {
     "paper1": None,
     "all_ng": dict(htc="ng", dryer="ng", ad="ng"),
@@ -751,7 +755,10 @@ FEED_MOISTURE_FACTOR = dict(name="feed_WC", kind="feedwc", range=(0.0, 1.0))
 MAIN_SWEEP_FIXED_DESIGN = dict(target_moisture_HTC=0.85,   # HTC slurry moisture
                                COD_target=25.0,           # kg COD/m3, Pathway A digester feed
                                TS_target=0.10)            # Pathway B digester feed TS
-MAIN_SWEEP_HRT_LEVELS = {"A": [30], "B": [20, 30, 40]}   # d (F13)
+# Pathway A digests HTC process water, already dissolved: hydrolysis does not
+# limit it and a high-rate digester runs at a shorter HRT; 15 d (supervisor
+# meeting 2026-11-27, decision log F20). Pathway B digests solid waste: 20/30/40 d.
+MAIN_SWEEP_HRT_LEVELS = {"A": [15], "B": [20, 30, 40]}   # d (F13, F20)
 
 # design variables screened with Morris (plant designer's choices; the main
 # sweep puts the ones that matter on a grid). kind "point": sets the point key.
@@ -770,7 +777,8 @@ def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moist
     the feedstock class), u (position 0-1 used as is), point (design variable
     of the point, only with include_design)."""
     hi = sb.hi
-    sp = [dict(name="pw_ch4_multiplier", kind="ctx", range=sb.PW_CH4_MULTIPLIER_RANGE),
+    sp = [dict(name="pw_ch4_multiplier", kind="ctx", range=sb.PW_CH4_MULTIPLIER_RANGE,
+               scale=getattr(sb, "PW_CH4_MULTIPLIER_SCALE", "linear")),
           dict(name="fD", kind="bfeed"), dict(name="k_hyd", kind="bfeed"), dict(name="f_sol", kind="bfeed"),
           dict(name="u_fc", kind="u", range=(0.0, 1.0)),
           dict(name="eps_HR", kind="ctx", range=hi.EPS_HR_RANGE),
@@ -801,7 +809,11 @@ def map_sample(u, space, feedstock_type, adm1_core):
             v = float(ui)                     # position in the feedstock's WC_range (make_points)
         else:
             lo, up = s["range"]
-            v = lo + float(ui) * (up - lo)
+            if s.get("scale") == "log":
+                # uniform in ln(v): a multiplier and its inverse are equally likely (C3b)
+                v = float(np.exp(np.log(lo) + float(ui) * (np.log(up) - np.log(lo))))
+            else:
+                v = lo + float(ui) * (up - lo)
             if s["kind"] == "hi":
                 hio[s["name"]] = v
             elif s["kind"] == "point":

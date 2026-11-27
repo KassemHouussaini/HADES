@@ -228,7 +228,7 @@ class SystemContext:
     heat_mix_shares: Any = None
     ash_disposal: Any = None             # ash treatment of the boiler ash (None -> omitted, printed)
     # Pathway A: multiplier on the process-water digester methane (and CO2),
-    # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE
+    # 1.0 = calibrated PW-ADM1; sweeps sample PW_CH4_MULTIPLIER_RANGE on a log scale
     pw_ch4_multiplier: float = 1.0
     # Pathway B: overrides of the feedstock degradability (ADM1.PATHWAY_B_FEED_PARAMS),
     # e.g. {"fD": 0.80, "f_sol": 0.30, "k_hyd": 0.20}; None = tabulated values
@@ -376,7 +376,7 @@ def check_inputs(ctx, adm1_mode="batch", adm1_HRT_days=None, TS_target=0.08):
     return ml
 
 
-# Pathway A process-water methane multiplier m (sampled uniformly in sweeps).
+# Pathway A process-water methane multiplier m (sampled on a log scale in sweeps).
 # Range: study-level measured BMP / PW-ADM1 from about 0.58 (Mannarino 2022)
 # to about 1.44 (Aragon-Briceno 2020), rounded outward. Central value 1.0
 # (not the data median, about 0.9) so that normal runs equal the calibrated
@@ -384,7 +384,16 @@ def check_inputs(ctx, adm1_mode="batch", adm1_HRT_days=None, TS_target=0.08):
 # stated limitation. m scales CH4 and CO2 leaving the digester (biogas
 # composition kept), then CH4 is capped at the theoretical 350 mL CH4 per g
 # of process-water COD fed.
-PW_CH4_MULTIPLIER_RANGE = (0.55, 1.45)
+# Range made symmetric as a ratio (supervisor meeting 2026-11-27, decision log
+# C3b): a multiplier of 0.55 (x 1/1.82) is a larger relative change than 1.45,
+# so the old (0.55, 1.45) range skewed results downward. New range: from the
+# lowest study ratio, 0.58 (Mannarino 2022), to its inverse 1/0.58 = 1.72, i.e.
+# [1/f, f] with f = 1.72; it covers the highest study ratio (1.44,
+# Aragon-Briceno 2020). Sampled uniformly in ln(m) (PW_CH4_MULTIPLIER_SCALE), so
+# x f and / f are equally likely and the geometric centre is 1.0. CH4 stays
+# capped at 350 mL CH4 per g COD fed (apply_pw_ch4_multiplier).
+PW_CH4_MULTIPLIER_RANGE = (round(1.0 / 1.72, 4), 1.72)     # (0.5814, 1.72)
+PW_CH4_MULTIPLIER_SCALE = "log"
 PW_CH4_MAX_NM3_PER_KG_COD = 0.350
 
 
