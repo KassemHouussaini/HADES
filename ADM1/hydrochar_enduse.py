@@ -205,15 +205,34 @@ REGIONAL_HEAT_MIX = {r: regional_heat_mix(r) for r in NRCAN_TABLE1_PJ}
 # =============================================================================
 # FUEL NITROGEN TO NOx
 # =============================================================================
-# Share of the fuel N emitted as NOx (expressed as NO2). Houshfar et al. (2012,
-# Energies 5, 270-290) report 1 to 25 % in biomass combustion, decreasing as
-# the fuel N content rises (see also Glarborg et al., 2003, Prog. Energy
-# Combust. Sci. 29, 89-113). The central value (10 %) is assumed within that
-# range.
-NOX_CONV_RANGE = (0.01, 0.25)
+# Share of the fuel N emitted as NOx (expressed as NO2). Paper 2 range 1-6 %
+# (decision log F22), was 1-25 % (Paper 1, main branch). Houshfar et al.
+# (2012, Energies 5, 270-290, doi:10.3390/en5020270, Figs. 10-11): conversion
+# falls as the fuel N rises; their straw/sewage sludge blend (1.42 % N)
+# converted 1.5-6 % of fuel N to NOx across all primary air ratios.
+# Glarborg et al. (2003, Prog. Energy Combust. Sci. 29, 89-113,
+# doi:10.1016/S0360-1285(02)00031-X) explain the trend: at high fuel N the N
+# species react with each other to N2 instead of NO. Hydrochar (2-7 % N) is
+# above the N range Houshfar tested, so the range is an extrapolation in the
+# direction the mechanism supports. Central value = midpoint.
+NOX_CONV_RANGE = (0.01, 0.06)
 
 
-NOX_CONV_CENTRAL = 0.10
+NOX_CONV_CENTRAL = 0.035
+
+
+# Share of the hydrochar S emitted as SO2 (decision log F22). Range 0.85-1.0,
+# sampled; central = midpoint. Lower bound: in sewage sludge hydrochar only
+# about 13 % of the S is sulfate (Wang et al. 2023, Sci. Total Environ.,
+# doi:10.1016/j.scitotenv.2023.167318, Fig. 2, read off a chart, one sludge,
+# XPS surface measurement), the only form that clearly stays in the ash;
+# organic S and metal sulfides burn to SO2 (Huang et al. 2021). Capture by
+# calcium in the ash could lower it further, but no source used here measures
+# it, so the range does not include it. The S in the hydrochar itself comes
+# from the HTC surrogate (S retained in the char 38-85 % of the feed S at the
+# central compositions); Wang et al. 2023 report 41 % for their sludge.
+S_TO_SO2_RANGE = (0.85, 1.0)
+S_TO_SO2_CENTRAL = 0.925
 
 
 # =============================================================================
@@ -293,7 +312,8 @@ def dry_flue_gas_Nm3_per_kg(C, H, O, N, S, o2_ref_pct=ELV_REF_O2_PCT):
     return v0 * 21.0 / (21.0 - o2_ref_pct)
 
 
-def compute_enduse_quantities(inv, HC_dry_mass_kg, nox_conv=NOX_CONV_CENTRAL):
+def compute_enduse_quantities(inv, HC_dry_mass_kg, nox_conv=NOX_CONV_CENTRAL,
+                              s_to_so2=S_TO_SO2_CENTRAL):
     """
     Heat delivered and stack emissions of the hydrochar boiler, per FU.
     HC_dry_mass_kg: bone-dry hydrochar per FU (HHV_char is a dry-basis value,
@@ -313,12 +333,14 @@ def compute_enduse_quantities(inv, HC_dry_mass_kg, nox_conv=NOX_CONV_CENTRAL):
         raise ValueError(f"[hydrochar_enduse] HHV_char = {HHV} MJ/kg outside (0, 40)")
     if not NOX_CONV_RANGE[0] <= float(nox_conv) <= NOX_CONV_RANGE[1]:
         raise ValueError(f"[hydrochar_enduse] nox_conv = {nox_conv} outside {NOX_CONV_RANGE}")
+    if not S_TO_SO2_RANGE[0] <= float(s_to_so2) <= S_TO_SO2_RANGE[1]:
+        raise ValueError(f"[hydrochar_enduse] s_to_so2 = {s_to_so2} outside {S_TO_SO2_RANGE}")
     m_dry = float(HC_dry_mass_kg)
     if m_dry < 0:
         raise ValueError(f"[hydrochar_enduse] negative hydrochar mass {m_dry}")
 
     CO2_bio_kg = m_dry * C / 100.0 * 44.0 / 12.0
-    SO2_kg = m_dry * S / 100.0 * 64.0 / 32.0
+    SO2_kg = m_dry * S / 100.0 * float(s_to_so2) * 64.0 / 32.0      # share s_to_so2 of S as SO2 (F22)
     NOx_kg = m_dry * N / 100.0 * float(nox_conv) * 46.0 / 14.0   # as NO2
     ash_kg = m_dry * Ash / 100.0
 
@@ -338,7 +360,7 @@ def compute_enduse_quantities(inv, HC_dry_mass_kg, nox_conv=NOX_CONV_CENTRAL):
     _conc = (lambda x: x / V_fg_Nm3 * 1e6) if V_fg_Nm3 > 0 else (lambda x: float("nan"))
 
     return dict(
-        m_hc_dry_kg=m_dry, nox_conv=float(nox_conv),
+        m_hc_dry_kg=m_dry, nox_conv=float(nox_conv), s_to_so2=float(s_to_so2),
         CO2_bio_kg=CO2_bio_kg, SO2_kg=SO2_kg, NOx_kg=NOx_kg, ash_kg=ash_kg,
         SubstitutionFactor_HC_COAL=SF, MJ_hydrochar=MJ_heat,
         SO2_per_MJ=per_MJ(SO2_comb_kg), NOx_per_MJ=per_MJ(NOx_comb_kg),

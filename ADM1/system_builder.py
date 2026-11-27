@@ -217,7 +217,8 @@ class SystemContext:
     # digestate characterization, heat integration and hydrochar end use
     feedstock_name: str = "food_waste"   # ad_characterization key (Pathway B digestate)
     eps_HR: Optional[float] = None       # HTC feed preheat effectiveness (None -> hi.EPS_HR_CENTRAL)
-    nox_conv: float = 0.10               # fuel N -> NOx, hydrochar boiler (hce.NOX_CONV_CENTRAL)
+    nox_conv: float = 0.035              # fuel N -> NOx, hydrochar boiler (hce.NOX_CONV_CENTRAL, F22)
+    s_to_so2: float = 0.925              # hydrochar S -> SO2 (hce.S_TO_SO2_CENTRAL, F22)
     qc_heat_mix: Any = None              # foreground activity: Quebec industrial combustion heat mix
     heat_mix_components_qc: Any = None   # bwl.resolve_heat_mix(ei, hce.HEAT_MIX_DATASETS, ...)
     # shares of the displaced heat mix: None -> hce.QC_HEAT_MIX (Paper 1);
@@ -1764,7 +1765,7 @@ def _build_system(ctx: SystemContext,
     # Heat delivered = dry char mass x HHV_char / HHV_coal / 0.04325 kg coal
     # per MJ (hydrochar_enduse). HHV_char is a dry-basis value, so it applies
     # to the bone-dry char mass.
-    q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv)
+    q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv, s_to_so2=ctx.s_to_so2)
     HHV_coal = hce.HHV_COAL_MJ_PER_KG
     coal_needed_1MJ = hce.COAL_KG_PER_MJ
     SubstitutionFactor_HC_COAL = q_enduse["SubstitutionFactor_HC_COAL"]
@@ -1798,7 +1799,7 @@ def _build_system(ctx: SystemContext,
         MJ_hydrochar = MJ_hydrochar * _scale_A
         dryer_fan_kWh = dryer_fan_kWh * _scale_A
         HC_dry_mass = HC_dry_mass * _scale_A
-        q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv)
+        q_enduse = hce.compute_enduse_quantities(inv, HC_dry_mass, nox_conv=ctx.nox_conv, s_to_so2=ctx.s_to_so2)
 
         print(f"[per-tonne scaling A] scale={_scale_A:.5f}  FU=1 tonne wet feed")
         print(f"[per-tonne scaling A] PW_yield={PW_yield:.3f} kg/t  "

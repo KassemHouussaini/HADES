@@ -62,7 +62,13 @@ def test_mj_hand_calculation(hce):
 def test_carbon_and_sulfur_conservation(hce):
     q = hce.compute_enduse_quantities(INV, 100.0)
     assert q["CO2_bio_kg"] * 12.0 / 44.0 == pytest.approx(55.0, rel=1e-12)   # all char C -> CO2
-    assert q["SO2_kg"] * 32.0 / 64.0 == pytest.approx(0.3, rel=1e-12)        # all S -> SO2 (uncapped)
+    # share s_to_so2 of the char S -> SO2, uncapped (F22); 1.0 = all S
+    assert q["SO2_kg"] * 32.0 / 64.0 == pytest.approx(0.3 * hce.S_TO_SO2_CENTRAL, rel=1e-12)
+    q1 = hce.compute_enduse_quantities(INV, 100.0, s_to_so2=1.0)
+    assert q1["SO2_kg"] * 32.0 / 64.0 == pytest.approx(0.3, rel=1e-12)
+    assert hce.S_TO_SO2_RANGE == (0.85, 1.0) and hce.NOX_CONV_RANGE == (0.01, 0.06)
+    with pytest.raises(ValueError):
+        hce.compute_enduse_quantities(INV, 100.0, s_to_so2=0.5)
     assert q["ash_kg"] == pytest.approx(11.2)
 
 

@@ -280,7 +280,7 @@ def make_context(sb, ei, bios, rc, point, heat_config, fg):
         foreground_activities=list(fg.values()),
         **sb_ctx_location(rc),
     )
-    for k in ("eps_HR", "nox_conv", "own_biogas_heat_eff"):
+    for k in ("eps_HR", "nox_conv", "s_to_so2", "own_biogas_heat_eff"):
         if k in prm:
             kw[k] = prm[k]
     return sb.SystemContext(**kw)
@@ -793,7 +793,8 @@ def parameter_space(sb, hce, adm1_core, include_design=False, include_feed_moist
           dict(name="u_fc", kind="u", range=(0.0, 1.0)),
           dict(name="eps_HR", kind="ctx", range=hi.EPS_HR_RANGE),
           dict(name="MC_char", kind="ctx", range=hi.MC_CHAR_RANGE),
-          dict(name="nox_conv", kind="ctx", range=hce.NOX_CONV_RANGE)]
+          dict(name="nox_conv", kind="ctx", range=hce.NOX_CONV_RANGE),
+          dict(name="s_to_so2", kind="ctx", range=hce.S_TO_SO2_RANGE)]      # F22
     for k, r in sb.SWEEP_HI_PARAMS.items():
         sp.append(dict(name=k, kind="hi", range=getattr(hi, r)))
     if include_design:
