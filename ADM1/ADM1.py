@@ -1273,7 +1273,16 @@ def translate_pw_to_adm1(C_pw, H_pw, O_pw, N_pw, S_pw,
     # initial inorganic carbon (kmol C/m3), bounded to 0.08-0.20
     S_IC = bound("S_IC (htc_pw) in [0.08, 0.20] kmol C/m3", COD_conc * 0.8 / 61.0, 0.08, 0.20)
 
-    fractions = derive_adm1_fractions(C_pw, H_pw, O_pw, N_pw, S_pw,
+    # Nitrogen counted once (decision log C3a): the share of the process-water N
+    # already present as ammonium enters ADM1 as S_IN above; only the remaining
+    # organic N is used for the protein share. Before this fix the protein share
+    # was computed from all N, so the ammonium N was released a second time when
+    # the protein was digested (protein overstated by 1/(1 - f_IN) = 2.1-2.8 over
+    # 180-240 C). The ammonium actually placed in S_IN (after its 0.13 kmol/m3
+    # bound) is subtracted, so N in S_IN + N used for protein = N_pw.
+    N_NH4_pw = S_IN * V_feed_diluted * MW_N
+    N_org_pw = max(0.0, N_pw - N_NH4_pw)
+    fractions = derive_adm1_fractions(C_pw, H_pw, O_pw, N_org_pw, S_pw,
                                        substrate_type="htc_pw", T_HTC=T_HTC)
     _print_fractions(fractions, "htc_pw", C_pw, H_pw, O_pw, N_pw, S_pw)
 

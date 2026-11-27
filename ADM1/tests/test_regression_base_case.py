@@ -11,13 +11,16 @@ ADM1_DIR = os.path.dirname(HERE)
 SCRIPT = os.path.join(HERE, "dryrun_mock_bw.py")
 
 FROZEN = {
-    "A": {"MJ_hydrochar": 1365.1333882001034, "CH4_mass_AD": 5.197704050762951,
-          "CO2_mass_AD": 9.60387207573531, "PW_yield": 832.9079321289062,
+    # A: process-water N counted once (decision log C3a, 2026-11-27): CH4 +0.34 %,
+    # biogas CO2 +13.5 % (less ammonium, less CO2 held as bicarbonate)
+    "A": {"MJ_hydrochar": 1365.1333882001034, "CH4_mass_AD": 5.215455352565214,
+          "CO2_mass_AD": 10.896106048819622, "PW_yield": 832.9079321289062,
           "HC_dry_yield": 116.95093790690107, "Q_heat_AD_MJ": 68.50894596491034},
     # B: feedstock-specific digester feed (ADM1.PATHWAY_B_FEED_PARAMS, food waste)
-    "B": {"MJ_hydrochar": 583.2053071249042, "CH4_mass_AD": 24.402600316096553,
-          "CO2_mass_AD": 52.07974691240193, "PW_yield": 335.97955778377263,
-          "HC_dry_yield": 48.97637063457607, "Q_heat_AD_MJ": 188.46962971074547},
+    # B: feed ammonium excluded from the digestate bicarbonate C (C2a): +0.007 %
+    "B": {"MJ_hydrochar": 583.2438796478383, "CH4_mass_AD": 24.402600316096553,
+          "CO2_mass_AD": 52.07974691240193, "PW_yield": 336.0017852594024,
+          "HC_dry_yield": 48.97960987495412, "Q_heat_AD_MJ": 188.46654326857495},
 }
 
 

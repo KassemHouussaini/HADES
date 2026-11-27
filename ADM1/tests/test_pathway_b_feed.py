@@ -125,3 +125,20 @@ def test_fisgativa_kvl_option(adm1):
     org_N = 2.3 * (1 - 0.8 / 5.2)
     exp = adm1.kvl_cod_split(40.0, 5.3, 36.0, org_N)["lipid"]
     assert d["_lipid_share"] == pytest.approx(exp, rel=1e-9)
+
+
+def test_process_water_nitrogen_counted_once(adm1):
+    """C3a: the ammonium placed in S_IN is not used again for the protein share;
+    protein comes from N_pw minus that ammonium."""
+    kw = dict(C_pw=20.0, H_pw=3.0, O_pw=15.0, N_pw=3.0, S_pw=0.2, PW_yield_L=800.0,
+              mode="continuous", HRT_days=15, T_HTC=220.0, RT_HTC=60.0, COD_conc_target=25.0)
+    d = adm1.translate_pw_to_adm1(**kw)
+    V = d["_V_feed_m3"]
+    N_nh4 = d["S_IN"] * V * adm1.MW_N
+    assert 0.0 < N_nh4 < 3.0
+    expected = adm1.derive_adm1_fractions(20.0, 3.0, 15.0, 3.0 - N_nh4, 0.2, substrate_type="htc_pw", T_HTC=220.0)
+    for k in ("S_aa", "X_pr", "S_su", "X_ch", "S_fa", "X_li"):
+        assert d["_fractions"][k] == pytest.approx(expected[k], rel=1e-12), k
+    # the protein share is lower than with all N (the old double count)
+    old = adm1.derive_adm1_fractions(20.0, 3.0, 15.0, 3.0, 0.2, substrate_type="htc_pw", T_HTC=220.0)
+    assert d["_fractions"]["X_pr"] < old["X_pr"]

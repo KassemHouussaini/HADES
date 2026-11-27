@@ -114,7 +114,7 @@ def adm1_ammonium_kg(adm1_out, V_feed_m3):
 
 def digestate_simple(feedstock_name, C, H, O, N, S, ash_kg,
                      CH4_kg, CO2_kg, m_wet_feed_kg, fD=None, u_fc=None,
-                     NH4_N_kg=None, TAN_kg=0.0):
+                     NH4_N_kg=None, TAN_kg=0.0, NH4_in_N_kg=0.0):
     """
     Digestate leaving the digester (steps 1-5 of the module docstring).
 
@@ -126,6 +126,14 @@ def digestate_simple(feedstock_name, C, H, O, N, S, ash_kg,
     NH4_N_kg                ammonium-N from the ADM1 steady state
                             (adm1_ammonium_kg). A value outside [0, N] raises
                             an error. None: f_NH4 x N.
+    NH4_in_N_kg             ammonium-N already in the digester feed (part of N), e.g.
+                            the measured feed ammonium of the Fisgativa feed
+                            chemistry (ADM1.FISGATIVA_FEED_CHEM, decision log C1d).
+                            Its counter-ion came with the feed's own inorganic
+                            carbon, not from the feed organic C, so only the
+                            ammonium released by ammonification in the digester
+                            (NH4_N - NH4_in_N_kg) takes bicarbonate C from the
+                            organic C (decision log C2a).
     TAN_kg                  ammonium-N carried by the wet feed in addition to
                             its dry-basis N (as ammonium bicarbonate); added to
                             the N and C entering the digester.
@@ -156,7 +164,12 @@ def digestate_simple(feedstock_name, C, H, O, N, S, ash_kg,
         lo, hi = p.get("f_NH4_range", (0.0, 1.0))
         if N > 0 and not lo <= NH4_N / N <= hi:
             warn.append(f"NH4/N {NH4_N / N:.2f} outside measured {lo:.2f}-{hi:.2f}")
-    C_bicarb = NH4_N * MW["C"] / MW["N"]
+    # one HCO3- per NH4+ released by ammonification (Batstone et al. 2002);
+    # ammonium already in the feed is excluded (C2a)
+    if NH4_in_N_kg < 0:
+        raise ValueError(f"[FEED AMMONIUM] NH4_in_N_kg={NH4_in_N_kg} < 0")
+    NH4_released = max(0.0, NH4_N - float(NH4_in_N_kg))
+    C_bicarb = NH4_released * MW["C"] / MW["N"]
     C_dig = C - C_biogas - C_bicarb
     if C_dig <= 0:
         warn.append(f"C_dig {C_dig:.2f} kg <= 0 (biogas C {C_biogas:.1f} of feed C {C:.1f})")

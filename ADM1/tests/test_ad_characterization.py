@@ -95,3 +95,13 @@ def test_ofmsw_uses_food_waste_coefficients(ac):
 def test_unknown_feedstock_raises(ac):
     with pytest.raises(KeyError):
         _run(ac, name="unknown_feed")
+
+
+def test_feed_ammonium_not_taken_from_organic_carbon(ac):
+    """C2a: only ammonium released in the digester takes bicarbonate C from the
+    organic C; ammonium already in the feed does not."""
+    kw = dict(C=40.0, H=5.0, O=35.0, N=2.5, S=0.4, ash_kg=16.0, CH4_kg=10.0, CO2_kg=20.0,
+              m_wet_feed_kg=1000.0, NH4_N_kg=1.0)
+    a = ac.digestate_simple("dairy_manure", **kw)
+    b = ac.digestate_simple("dairy_manure", **kw, NH4_in_N_kg=0.4)
+    assert b["_C_dig_kg"] - a["_C_dig_kg"] == pytest.approx(0.4 * 12.011 / 14.007, rel=1e-9)

@@ -1577,7 +1577,10 @@ def _build_system(ctx: SystemContext,
         digestate_params = ac.digestate_simple(
             ctx.feedstock_name, C_feed_mass, H_feed_mass, O_feed_mass,
             N_feed_mass, S_feed_mass, ash_kg_feed,
-            CH4_mass, CO2_mass, m_feedstock_slurry, NH4_N_kg=_NH4_B, u_fc=ctx.u_fc)
+            CH4_mass, CO2_mass, m_feedstock_slurry, NH4_N_kg=_NH4_B, u_fc=ctx.u_fc,
+            # ammonium already in the digester feed (S_IN x feed volume, kg N),
+            # excluded from the bicarbonate C taken from the organic C (C2a)
+            NH4_in_N_kg=float(feed_inputs.get("_inf_S_IN", 0.0)) * float(feed_inputs["_V_feed_m3"]) * 14.007)
         print(f"[Pathway B | DIGESTATE] dry {digestate_params['_m_dry_kg']:.1f} kg  "
               f"VS destroyed {digestate_params['_dg_VS_destroyed'] * 100:.1f} %  "
               f"NH4-N {digestate_params['_NH4_N_kg']:.2f} kg ({_NH4_source_B})  "

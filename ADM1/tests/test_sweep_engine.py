@@ -105,7 +105,7 @@ def test_engine_end_to_end_mock(tmp_path):
                        capture_output=True, text=True, timeout=900)
     assert r.returncode == 0, r.stdout[-3000:] + r.stderr[-3000:]
     d = json.load(open(out))
-    frozen = {"A": (1365.1333882001034, 5.197704050762951), "B": (583.2053071249042, 24.402600316096553)}
+    frozen = {"A": (1365.1333882001034, 5.215455352565214), "B": (583.2438796478383, 24.402600316096553)}   # after C3a, C2a
     wk = d.pop("worker")
     assert wk["status"] == ["ok", "done"] and wk["rows"] == 4 and not wk["err"]   # 2 contexts x 2 heat
     assert wk["fD"] == [0.8] * 4 and wk["x"] == [0.3] * 4

@@ -8,8 +8,9 @@ import pytest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADM1_DIR = os.path.dirname(HERE)
 SCRIPT = os.path.join(HERE, "dryrun_mock_bw.py")
-BASE_B = {"CH4_mass_AD": 24.402600316096553, "MJ_hydrochar": 583.2053071249042}
-BASE_A = {"CH4_mass_AD": 5.197704050762951}
+# base case after C3a (process-water N counted once) and C2a (feed ammonium), 2026-11-27
+BASE_B = {"CH4_mass_AD": 24.402600316096553, "MJ_hydrochar": 583.2438796478383}
+BASE_A = {"CH4_mass_AD": 5.215455352565214}
 
 
 def _run(pathway, out, **env):
@@ -59,7 +60,7 @@ def test_batch_mode_blank_corrected_per_fu(pathway, tmp_path):
     m = d["meta"]
     assert m["adm1_mode"] == "batch"
     if pathway == "A":
-        assert m["CH4_mass_AD"] == pytest.approx(4.6918, rel=1e-3)
+        assert m["CH4_mass_AD"] == pytest.approx(4.6474, rel=1e-3)      # 4.6918 before C3a
         ml_per_g = m["CH4_mass_AD"] / 0.716 / m["pw_COD_fed_kg"] * 1000
         assert ml_per_g < 350                                   # below the theoretical maximum
         assert m["CH4_mass_AD"] < BASE_A["CH4_mass_AD"]          # 30-d BMP below continuous at 30 d HRT
