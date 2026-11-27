@@ -151,3 +151,25 @@ def test_removed_mass_is_uncontrolled_minus_emitted(hce, monkeypatch):
     monkeypatch.setattr(hce, "ELV_CAP_ENABLED", False)
     q1 = hce.compute_enduse_quantities(INV, 100.0)
     assert q1["SO2_removed_kg"] == q1["NOx_removed_kg"] == q1["PM_removed_kg"] == 0.0
+
+
+def test_flue_gas_treatment_per_MJ():
+    """F21: removed SO2 and NOx (kg per FU) bought per MJ of hydrochar heat from
+    the ecoinvent treatment activities; nothing when no activity is given."""
+    import importlib.util, os, sys, types
+    sys.modules.setdefault("bw2data", types.ModuleType("bw2data"))
+    sys.modules.setdefault("bw2calc", types.ModuleType("bw2calc"))
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, here)
+    import sweep_engine as se
+    sb = se._load("system_builder", "system_builder.py")
+    heat = se.MemAct("heat_prod_hydrochar", "Heat production from hydrochar", "megajoule")
+    sox = se.MemAct("sox", "market for SOx retained, in hard coal flue gas desulfurisation", "kilogram")
+    nox = se.MemAct("nox", "market for NOx retained, by selective catalytic reduction", "kilogram")
+    q = {"MJ_hydrochar": 1000.0, "SO2_removed_kg": 2.0, "NOx_removed_kg": 0.5}
+    out = sb.add_flue_gas_treatment(heat, q, sox, nox)
+    amounts = {e.input["code"]: e["amount"] for e in heat.exchanges()}
+    assert amounts == {"sox": pytest.approx(0.002), "nox": pytest.approx(0.0005)}
+    assert out == {"SO2_removed_kg": pytest.approx(0.002), "NOx_removed_kg": pytest.approx(0.0005)}
+    empty = se.MemAct("h2", "Heat", "megajoule")
+    assert sb.add_flue_gas_treatment(empty, q, None, None) == {} and empty.exchanges() == []

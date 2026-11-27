@@ -251,6 +251,34 @@ PM_TOTAL_COAL_KG_PER_MJ = 6.25e-5
 ASH_COAL_PCT = 10.0   # reference coal ash content (%) for the PM scaling
 
 
+# =============================================================================
+# FLUE GAS TREATMENT OF THE HYDROCHAR BOILER (decision log F21)
+# =============================================================================
+# The boiler must remove what it emits above the limit values (removed mass =
+# uncontrolled estimate - emitted, compute_enduse_quantities). The removal is
+# linked to the ecoinvent flue gas treatment activities that ecoinvent's own
+# coal power plants buy (e.g. "electricity production, hard coal", CA-QC,
+# ecoinvent 3.11/3.12: inputs "SOx retained, in hard coal flue gas
+# desulfurisation" and "NOx retained, by selective catalytic reduction", both
+# in kg retained), as advised by the supervisor (meeting 2026-11-27):
+#   SO2: market for SOx retained, in hard coal flue gas desulfurisation
+#        (RoW; RER also exists; 1.01 kg CO2-eq per kg, ecoQuery 3.12)
+#   NOx: market for NOx retained, by selective catalytic reduction
+#        (GLO only; 1.20 kg CO2-eq per kg, ecoQuery 3.12)
+# Simplifications to state: ecoinvent has no SNCR dataset, the technology a
+# 1-10 MW boiler would more likely use, so SCR is used; the hard coal
+# desulfurisation dataset stands for any limestone/lime scrubbing of the
+# hydrochar flue gas; SOx is counted as SO2 and NOx as NO2, as in the removed
+# masses; dust removal has no ecoinvent treatment activity and is not added
+# (captured ash already goes to ash disposal). The coal furnace template
+# (heat production, at hard coal industrial furnace 1-10MW) contains no flue
+# gas cleaning (checked on ecoQuery 3.12), so nothing is counted twice.
+FLUE_GAS_SOX_DATASET = ("market for SOx retained, in hard coal flue gas desulfurisation",
+                        "SOx retained, in hard coal flue gas desulfurisation", ["RoW", "RER", "GLO"])
+FLUE_GAS_NOX_DATASET = ("market for NOx retained, by selective catalytic reduction",
+                        "NOx retained, by selective catalytic reduction", ["GLO", "RoW"])
+
+
 def dry_flue_gas_Nm3_per_kg(C, H, O, N, S, o2_ref_pct=ELV_REF_O2_PCT):
     """
     Dry flue gas (Nm3 per kg dry fuel) at the reference O2, from the

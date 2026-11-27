@@ -223,6 +223,16 @@ def resolve_context(ei, preset_key, sb, lcx):
         ash = bwl.find_exact(ei, "market for wood ash mixture, pure", LOC)
     except LookupError:
         ash = None
+    # flue gas treatment of the hydrochar boiler (F21); absent datasets leave
+    # the boiler without a treatment burden and are reported
+    hce = sb.hce
+    for key, (name, product, prio) in (("flue_gas_sox", hce.FLUE_GAS_SOX_DATASET),
+                                       ("flue_gas_nox", hce.FLUE_GAS_NOX_DATASET)):
+        try:
+            bg[key] = bwl.find_exact(ei, name, prio, product=product)
+        except LookupError:
+            bg[key] = None
+            print(f"  [flue gas] WARNING: '{name}' not found; no {key} burden")
     return dict(preset=p, bg=bg, heat_mix=heat_mix, ng_comp=ng_comp, ash=ash,
                 co2_air=bwl.get_flow("Carbon dioxide, non-fossil", ("air",), bwl.CORE_FLOW_LOCATIONS),
                 co_air=bwl.get_flow("Carbon monoxide, non-fossil", ("air",), bwl.CORE_FLOW_LOCATIONS))

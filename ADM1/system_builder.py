@@ -257,6 +257,12 @@ class SystemContext:
     # Paper 1 (HTC electric, dryer ctx.drying_heat, digester ctx.ad_heat).
     heat_supply: Optional[dict] = None
     heat_backup: Any = None              # MJ heat activity for an own-biogas shortfall (None -> ctx.ad_heat)
+    # flue gas treatment of the hydrochar boiler (decision log F21): ecoinvent
+    # "SOx retained, in hard coal flue gas desulfurisation" and "NOx retained,
+    # by selective catalytic reduction" activities (kg retained). None: no
+    # treatment burden (Paper 1).
+    flue_gas_sox: Any = None
+    flue_gas_nox: Any = None
     # MJ heat delivered per MJ methane burned on site, relative to the natural
     # gas boiler of the credit (see HEAT SUPPLY below); 1.0 = Paper 1 convention
     own_biogas_heat_eff: float = 1.0
@@ -1092,6 +1098,27 @@ def build_hydrochar_enduse_exchanges(ctx, q, bios):
         ctx.heat_prod, ctx.coal_heat, bios, q["SO2_per_MJ"], q["NOx_per_MJ"],
         q["CO2_bio_per_MJ"], q["Ash_char_pct"], locations=CORE_FLOW_LOCATIONS,
         pm_scale=q.get("PM_scale"))
+    add_flue_gas_treatment(ctx.heat_prod, q, ctx.flue_gas_sox, ctx.flue_gas_nox)
+
+
+def add_flue_gas_treatment(heat_prod, q, sox_act, nox_act):
+    """Flue gas treatment of the hydrochar boiler (decision log F21): the SO2
+    and NOx removed to meet the emission limits (q from
+    hce.compute_enduse_quantities, kg per FU), per MJ of heat since heat_prod
+    is 1 MJ, bought from the ecoinvent "SOx retained" / "NOx retained"
+    activities (kg retained). Booked with the hydrochar end use. A None
+    activity adds nothing (Paper 1). Returns {key: kg per MJ written}."""
+    out = {}
+    MJ = float(q.get("MJ_hydrochar") or 0.0)
+    if MJ <= 0:
+        return out
+    for act, key in ((sox_act, "SO2_removed_kg"), (nox_act, "NOx_removed_kg")):
+        removed = float(q.get(key, 0.0))
+        if act is not None and removed > 0:
+            heat_prod.new_exchange(input=act, amount=removed / MJ,
+                                   type="technosphere", unit="kilogram").save()
+            out[key] = removed / MJ
+    return out
 
 # Centrifuge N split. Molar mass of N taken as 14.0 kg/kmol, consistent with
 # ad_characterization._S_IN_equiv_kmol_m3.
